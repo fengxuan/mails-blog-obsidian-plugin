@@ -9,6 +9,7 @@ For architecture, cross-repo auth flow, debugging notes, and current limitations
 - Save the current note as a draft
 - Publish the current note
 - Update an already linked note and republish it
+- Sync a linked note back from Mails Blog with conflict protection
 - Upload an image from the vault and insert returned Markdown
 - Write blog binding fields back into note frontmatter
 
@@ -16,6 +17,7 @@ For architecture, cross-repo auth flow, debugging notes, and current limitations
 
 - `Mails Blog: Save Current Note as Draft`
 - `Mails Blog: Publish Current Note`
+- `Mails Blog: Sync Current Note From Blog`
 - `Mails Blog: Unlink Current Note from Blog Post`
 - `Mails Blog: Upload Image from Vault`
 
@@ -27,6 +29,10 @@ Command behavior summary:
 - `Publish Current Note`
   - always saves the current note as a draft first
   - then publishes that remote post
+- `Sync Current Note From Blog`
+  - pulls the linked remote post back into the current note
+  - only overwrites automatically when the remote post changed and the local note has not changed since the last sync/save/publish
+  - stops with a conflict notice when both local and remote changed
 - `Unlink Current Note from Blog Post`
   - removes only local plugin-managed binding keys from frontmatter
   - does not delete the remote post
@@ -91,6 +97,21 @@ What it does not prove:
 
 For the full command-to-backend architecture and future AI maintenance notes, see [AI_HANDOFF.md](./AI_HANDOFF.md).
 
+## Network And Data Disclosure
+
+This plugin connects to the configured `Blog API Base URL` and sends:
+
+- your Obsidian plugin bearer token
+- the current note title, metadata, and markdown body
+- selected vault image files when you use the upload command
+
+This plugin writes back into the current note:
+
+- blog binding metadata in frontmatter
+- synchronized remote content when you run `Sync Current Note From Blog`
+
+The plugin does not collect analytics, does not bundle ads, and does not upload notes unless you explicitly run a publish, draft, sync, or image-upload command.
+
 ## Manual Install
 
 1. Build the plugin with `npm run build`.
@@ -121,6 +142,17 @@ The packaged release folder also includes:
 
 It does not include local secrets such as `.env.local`.
 
+## Community Plugin Release Notes
+
+For Community Plugins submission:
+
+- the source repository should keep `manifest.json`, `README.md`, and `LICENSE`
+- release assets should include:
+  - `manifest.json`
+  - `main.js`
+  - `styles.css`
+- the GitHub release tag must exactly match `manifest.json` `version`
+
 ## Frontmatter
 
 Supported metadata fields:
@@ -138,8 +170,29 @@ Plugin-managed binding fields:
 - `mails_blog_status`
 - `mails_blog_author_slug`
 - `mails_blog_updated_at`
+- `mails_blog_sync_hash`
 
 The plugin strips YAML frontmatter from the note body before sending `content_markdown` to Mails Blog.
+
+## Sync Behavior
+
+If the blog post was updated elsewhere and Obsidian has not been updated yet, run:
+
+- `Mails Blog: Sync Current Note From Blog`
+
+The plugin uses:
+
+- `mails_blog_updated_at` as the remote version timestamp
+- `mails_blog_sync_hash` as the last synchronized content snapshot
+
+Safety rules:
+
+- remote changed, local unchanged:
+  - plugin replaces the current note with the remote blog content
+- local changed, remote unchanged:
+  - plugin keeps the local note and asks you to publish if you want to push it
+- local changed and remote changed:
+  - plugin stops with a conflict notice instead of overwriting either side
 
 ## Image Upload
 

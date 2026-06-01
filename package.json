@@ -1,6 +1,6 @@
 {
   "name": "mails-blog-obsidian-plugin",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "Obsidian plugin for publishing notes to Mails Blog",
   "main": "main.js",
   "scripts": {
