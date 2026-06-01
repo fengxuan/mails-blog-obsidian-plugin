@@ -1,0 +1,21 @@
+{
+  "name": "mails-blog-obsidian-plugin",
+  "version": "0.1.0",
+  "description": "Obsidian plugin for publishing notes to Mails Blog",
+  "main": "main.js",
+  "scripts": {
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "check": "tsc --noEmit --skipLibCheck",
+    "release:prepare": "npm run build",
+    "release:package": "npm run build && mkdir -p release/mails-blog-publisher && cp manifest.json main.js styles.css versions.json README.md AI_HANDOFF.md release/mails-blog-publisher/"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.57",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.5",
+    "obsidian": "^1.8.10",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.3"
+  }
+}
