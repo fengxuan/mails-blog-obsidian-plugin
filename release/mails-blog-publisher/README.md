@@ -33,6 +33,13 @@ After the first successful setup, the plugin will try to rotate its own token au
 Rotating a token in iOS only invalidates the previous token for the same device label. Tokens belonging to other devices stay active.
 If a token has already expired, was manually revoked, or was regenerated elsewhere with the same label, the plugin cannot recover by itself and you need to copy a fresh token again from iOS `Settings -> Obsidian Plugin`.
 
+## Token Model
+
+The plugin itself uses only the dedicated Obsidian plugin token copied from iOS.
+It does not directly use backend service secrets such as `INTERNAL_API_TOKEN`, `BLOG_CHAT_API_INTERNAL_TOKEN`, `ACCESS_TOKEN_SECRET`, or `INTERNAL_SERVICE_SECRET`.
+
+That means the recent removal of legacy `AUTH_SECRET` runtime usage does not require any plugin-side token migration.
+
 ## Manual Install
 
 1. Build the plugin with `npm run build`.

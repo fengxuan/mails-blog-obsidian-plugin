@@ -21,6 +21,16 @@ The Obsidian publishing flow spans four projects:
 - `mails-blog`
   - Accepts either a normal chat JWT access token or the Obsidian blog plugin token on editor routes.
 
+Important current auth note:
+
+- The Obsidian plugin itself does not use `AUTH_SECRET`.
+- Runtime fallback to `AUTH_SECRET` has been removed from the active backend code paths.
+- The plugin flow still depends on:
+  - `ACCESS_TOKEN_SECRET` for normal chat JWT verification on blog editor routes
+  - `BLOG_CHAT_API_INTERNAL_TOKEN` on `mails-blog`, which must match `mails-chat-api` `INTERNAL_API_TOKEN`
+  - the dedicated Obsidian plugin token issued by `mails-chat-api`
+- `INTERNAL_SERVICE_SECRET` now exists between `mails-chat-api` and `mails-blog`, but it is used for internal signed service tokens like subscription confirmation, not for the Obsidian plugin token itself.
+
 ## 2. Source Of Truth In The Plugin Repo
 
 Important:
@@ -258,6 +268,15 @@ Relevant implementation:
 - `createBlogPluginToken(...)`
 - `revokeActiveBlogPluginTokensForUserLabel(...)`
 - `listBlogPluginTokens(...)`
+
+### Impact of the AUTH_SECRET removal
+
+- No plugin-side token format change was required.
+- Existing valid Obsidian plugin tokens should continue to work.
+- If the plugin flow breaks after a backend auth change, first inspect:
+  - `BLOG_CHAT_API_INTERNAL_TOKEN` on `mails-blog`
+  - `INTERNAL_API_TOKEN` on `mails-chat-api`
+  - `ACCESS_TOKEN_SECRET` alignment if normal chat JWT editor auth is also failing
 - `revokeBlogPluginToken(...)`
 
 Current rules:
@@ -428,6 +447,9 @@ Required config on `mails-blog`:
 
 - secret: `BLOG_CHAT_API_INTERNAL_TOKEN`
   - must match `mails-chat-api` `INTERNAL_API_TOKEN`
+- secret: `INTERNAL_SERVICE_SECRET`
+  - must match `mails-chat-api`
+  - not used directly by the Obsidian plugin token flow, but now required by `mails-blog` for other internal service-token routes
 - var: `BLOG_CHAT_API_BASE_URL`
   - fallback only
 - service binding:

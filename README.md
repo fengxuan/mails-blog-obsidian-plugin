@@ -33,6 +33,27 @@ After the first successful setup, the plugin will try to rotate its own token au
 Rotating a token in iOS only invalidates the previous token for the same device label. Tokens belonging to other devices stay active.
 If a token has already expired, was manually revoked, or was regenerated elsewhere with the same label, the plugin cannot recover by itself and you need to copy a fresh token again from iOS `Settings -> Obsidian Plugin`.
 
+## Token Model
+
+The plugin itself uses only the dedicated Obsidian plugin token copied from iOS.
+It does not directly use backend service secrets such as `INTERNAL_API_TOKEN`, `BLOG_CHAT_API_INTERNAL_TOKEN`, `ACCESS_TOKEN_SECRET`, or `INTERNAL_SERVICE_SECRET`.
+
+That means the recent removal of legacy `AUTH_SECRET` runtime usage does not require any plugin-side token migration.
+
+Backend dependencies that still matter for this plugin flow are:
+
+- `ACCESS_TOKEN_SECRET`
+  - shared by `mails-chat-api`, `mails-blog`, `mailsdev/worker`, and `mails-realtime-notify`
+  - used when `mails-blog` accepts a normal chat access token on editor routes
+- `BLOG_CHAT_API_INTERNAL_TOKEN`
+  - stored on `mails-blog`
+  - must match `mails-chat-api` `INTERNAL_API_TOKEN`
+  - used when `mails-blog` verifies Obsidian plugin tokens through `mails-chat-api`
+- `INTERNAL_SERVICE_SECRET`
+  - shared by `mails-chat-api` and `mails-blog`
+  - used for other internal blog service tokens such as subscription confirmation
+  - not used directly by the Obsidian plugin
+
 ## Manual Install
 
 1. Build the plugin with `npm run build`.
