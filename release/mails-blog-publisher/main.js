@@ -87,7 +87,25 @@ var MailsBlogApiClient = class {
     this.options = options;
   }
   async testConnection() {
-    return this.request("/api/posts/me", "GET");
+    const posts = await this.request("/api/posts/me", "GET", void 0, {
+      skipTokenRefresh: true
+    });
+    let tokenRefreshed = false;
+    let refreshWarning = null;
+    const currentToken = this.settings.obsidianPluginToken.trim();
+    if (currentToken && this.shouldRefreshToken()) {
+      try {
+        await this.refreshToken(currentToken);
+        tokenRefreshed = true;
+      } catch (error) {
+        refreshWarning = error instanceof Error ? error.message : "Token refresh failed.";
+      }
+    }
+    return {
+      posts,
+      tokenRefreshed,
+      refreshWarning
+    };
   }
   async createDraft(payload) {
     const response = await this.request("/api/posts", "POST", payload);
@@ -134,8 +152,12 @@ var MailsBlogApiClient = class {
       response.status
     );
   }
-  async request(path, method, body) {
-    await this.ensureTokenReady();
+  async request(path, method, body, options = {}) {
+    if (!options.skipTokenRefresh) {
+      await this.ensureTokenReady();
+    } else {
+      this.requireToken();
+    }
     const blogApiBaseUrl = this.requireBaseUrl();
     const token = this.requireToken();
     const headers = {
@@ -179,20 +201,21 @@ var MailsBlogApiClient = class {
     if (!token) {
       throw new MailsBlogApiError("Obsidian plugin token is required.");
     }
+    if (this.shouldRefreshToken()) {
+      await this.refreshToken(token);
+    }
+  }
+  shouldRefreshToken() {
     const expiresAt = this.settings.obsidianPluginTokenExpiresAt.trim();
     if (!expiresAt) {
-      await this.refreshToken(token);
-      return;
+      return true;
     }
     const expiresAtMs = Date.parse(expiresAt);
     if (!Number.isFinite(expiresAtMs)) {
-      await this.refreshToken(token);
-      return;
+      return true;
     }
     const refreshThresholdMs = 1e3 * 60 * 60 * 24 * 3;
-    if (expiresAtMs - Date.now() <= refreshThresholdMs) {
-      await this.refreshToken(token);
-    }
+    return expiresAtMs - Date.now() <= refreshThresholdMs;
   }
   async refreshToken(currentToken) {
     const blogApiBaseUrl = this.requireBaseUrl();
@@ -549,7 +572,14 @@ var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
           });
           const result = await client.testConnection();
           await this.plugin.saveSettings();
-          new import_obsidian5.Notice(`Connected successfully. ${result.items.length} post(s) visible.`);
+          const baseMessage = `Connected successfully. ${result.posts.items.length} post(s) visible.`;
+          if (result.tokenRefreshed) {
+            new import_obsidian5.Notice(`${baseMessage} Token rotated and saved locally.`);
+          } else if (result.refreshWarning) {
+            new import_obsidian5.Notice(`${baseMessage} Warning: current token works, but refresh failed: ${result.refreshWarning}`);
+          } else {
+            new import_obsidian5.Notice(baseMessage);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Connection test failed.";
           new import_obsidian5.Notice(message);

@@ -7,6 +7,7 @@ import type {
   ObsidianPluginTokenRefreshResponse,
   PostListResponse,
   PostPayload,
+  TestConnectionResult,
 } from "./types";
 
 export class MailsBlogApiError extends Error {
@@ -27,8 +28,28 @@ export class MailsBlogApiClient {
     } = {},
   ) {}
 
-  async testConnection(): Promise<PostListResponse> {
-    return this.request<PostListResponse>("/api/posts/me", "GET");
+  async testConnection(): Promise<TestConnectionResult> {
+    const posts = await this.request<PostListResponse>("/api/posts/me", "GET", undefined, {
+      skipTokenRefresh: true,
+    });
+
+    let tokenRefreshed = false;
+    let refreshWarning: string | null = null;
+    const currentToken = this.settings.obsidianPluginToken.trim();
+    if (currentToken && this.shouldRefreshToken()) {
+      try {
+        await this.refreshToken(currentToken);
+        tokenRefreshed = true;
+      } catch (error) {
+        refreshWarning = error instanceof Error ? error.message : "Token refresh failed.";
+      }
+    }
+
+    return {
+      posts,
+      tokenRefreshed,
+      refreshWarning,
+    };
   }
 
   async createDraft(payload: PostPayload): Promise<BlogPost> {
@@ -84,8 +105,17 @@ export class MailsBlogApiClient {
     );
   }
 
-  private async request<T>(path: string, method: string, body?: unknown): Promise<T> {
-    await this.ensureTokenReady();
+  private async request<T>(
+    path: string,
+    method: string,
+    body?: unknown,
+    options: { skipTokenRefresh?: boolean } = {},
+  ): Promise<T> {
+    if (!options.skipTokenRefresh) {
+      await this.ensureTokenReady();
+    } else {
+      this.requireToken();
+    }
     const blogApiBaseUrl = this.requireBaseUrl();
     const token = this.requireToken();
 
@@ -137,22 +167,24 @@ export class MailsBlogApiClient {
       throw new MailsBlogApiError("Obsidian plugin token is required.");
     }
 
+    if (this.shouldRefreshToken()) {
+      await this.refreshToken(token);
+    }
+  }
+
+  private shouldRefreshToken(): boolean {
     const expiresAt = this.settings.obsidianPluginTokenExpiresAt.trim();
     if (!expiresAt) {
-      await this.refreshToken(token);
-      return;
+      return true;
     }
 
     const expiresAtMs = Date.parse(expiresAt);
     if (!Number.isFinite(expiresAtMs)) {
-      await this.refreshToken(token);
-      return;
+      return true;
     }
 
     const refreshThresholdMs = 1000 * 60 * 60 * 24 * 3;
-    if (expiresAtMs - Date.now() <= refreshThresholdMs) {
-      await this.refreshToken(token);
-    }
+    return expiresAtMs - Date.now() <= refreshThresholdMs;
   }
 
   private async refreshToken(currentToken: string): Promise<void> {

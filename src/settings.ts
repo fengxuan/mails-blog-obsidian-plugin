@@ -73,7 +73,14 @@ export class MailsBlogSettingTab extends PluginSettingTab {
             });
             const result = await client.testConnection();
             await this.plugin.saveSettings();
-            new Notice(`Connected successfully. ${result.items.length} post(s) visible.`);
+            const baseMessage = `Connected successfully. ${result.posts.items.length} post(s) visible.`;
+            if (result.tokenRefreshed) {
+              new Notice(`${baseMessage} Token rotated and saved locally.`);
+            } else if (result.refreshWarning) {
+              new Notice(`${baseMessage} Warning: current token works, but refresh failed: ${result.refreshWarning}`);
+            } else {
+              new Notice(baseMessage);
+            }
           } catch (error) {
             const message = error instanceof Error ? error.message : "Connection test failed.";
             new Notice(message);

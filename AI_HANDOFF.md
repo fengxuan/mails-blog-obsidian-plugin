@@ -59,7 +59,7 @@ End-to-end flow today:
 4. iOS shows the token, lets the user copy it, and persists the latest token in Keychain locally.
 5. User pastes the token into Obsidian plugin settings.
 6. Obsidian plugin stores the token and expiry in plugin settings data.
-7. Before normal API calls, the plugin can auto-refresh the token through `mails-blog` if the token is missing expiry info or is close to expiry.
+7. Before normal write/upload API calls, the plugin can auto-refresh the token through `mails-blog` if the token is missing expiry info or is close to expiry.
 8. Obsidian plugin sends `Authorization: Bearer <plugin-token>` to `mails-blog`.
 9. `mails-blog` tries normal JWT auth first. If that fails with `401`, it falls back to plugin-token verification through `mails-chat-api`.
 10. Once authenticated, `mails-blog` draft/publish APIs run normally.
@@ -80,6 +80,12 @@ End-to-end flow today:
   - `Blog API Base URL`
   - `Obsidian Plugin Token`
 - `Test Connection` calls `GET /api/posts/me`.
+
+Current `Test Connection` behavior:
+
+- It first tries `GET /api/posts/me` with the currently stored token and does not force a pre-refresh.
+- If that read succeeds and the stored expiry is missing, invalid, or within 3 days of expiry, it then tries to refresh the token and save the rotated token locally.
+- If the read succeeds but refresh fails, the UI still reports connection success and adds a warning about token rotation.
 
 Important tradeoff:
 
@@ -194,7 +200,7 @@ Behavior notes:
 The plugin directly calls these `mails-blog` routes:
 
 - `GET /api/posts/me`
-  - Used by `Test Connection`.
+  - Used by `Test Connection` as the primary auth smoke test.
 - `POST /api/posts`
   - Create draft.
 - `PATCH /api/posts/:id`
@@ -305,11 +311,17 @@ Plugin behavior:
 - The plugin stores both:
   - `obsidianPluginToken`
   - `obsidianPluginTokenExpiresAt`
-- Before each API request, the plugin checks expiry.
+- Before normal write/upload API requests, the plugin checks expiry first.
 - If expiry is missing, invalid, or within 3 days of expiration, it calls:
   - `POST /api/plugin-auth/refresh`
 - On success, the plugin replaces the saved token and expiry locally.
 - The refreshed token keeps the same device label lineage as the old token.
+
+`Test Connection` intentionally behaves a little differently:
+
+- It first answers the narrower question "does this token work right now?" by calling `GET /api/posts/me` without forcing refresh.
+- Only after that read succeeds does it try best-effort refresh if local expiry metadata says rotation is needed.
+- This avoids false-negative connection failures caused by refresh-path problems when the current token is still valid for reads.
 
 Operational consequence:
 
@@ -421,6 +433,34 @@ On success it also updates `last_used_at`.
 - Sharing the exact same token string across multiple machines is no longer the recommended model.
 - If two machines intentionally reuse the same label, whichever one regenerates or refreshes later will invalidate the earlier token for that label lineage.
 
+## 9A. Detailed Test Connection Flow
+
+Current flow:
+
+1. User clicks `Test Connection` in plugin settings.
+2. Plugin calls `GET /api/posts/me` with the currently stored bearer token.
+3. `mails-blog` route uses `withEditorSession(...)`.
+4. `withEditorSession(...)` first attempts `ACCESS_TOKEN_SECRET` JWT verification.
+5. On `401`, it falls back to `mails-chat-api /api/internal/auth/blog-plugin-token/verify`.
+6. That verify call requires `mails-blog` `BLOG_CHAT_API_INTERNAL_TOKEN` to match `mails-chat-api` `INTERNAL_API_TOKEN`.
+7. If `/api/posts/me` succeeds, the plugin reports connection success.
+8. Only after that success, if local expiry metadata is missing, invalid, or near expiry, the plugin calls `POST /api/plugin-auth/refresh`.
+9. `mails-blog` proxies refresh to `mails-chat-api /api/auth/obsidian-token/refresh`.
+10. `mails-chat-api` verifies the current plugin token, revokes it, issues a replacement token for the same label, and returns the new token + expiry.
+11. Plugin saves the rotated token and new expiry locally.
+
+What this test proves:
+
+- the configured `Blog API Base URL` is reachable
+- the current token can authenticate against blog editor routes
+- the plugin-token verify bridge between `mails-blog` and `mails-chat-api` is working
+
+What it does not fully prove:
+
+- image upload works
+- draft save and publish work end-to-end
+- refresh wiring is healthy, unless the UI explicitly says the token was rotated or shows a refresh warning
+
 ## 10. How `mails-blog` Accepts Plugin Tokens
 
 Relevant files:
@@ -507,7 +547,277 @@ Current limitation:
 - The plugin only uploads images that already exist in the vault; it does not yet support paste/clipboard upload flows.
 - Frontmatter is the plugin-side metadata source of truth, but the server does not parse frontmatter itself.
 
-## 14. Fast Debugging Checklist
+## 14. Detailed Command Flows
+
+This section is the most important one for future AI changes.
+It maps each Obsidian command to the plugin code, HTTP calls, auth behavior, backend write model, and local side effects.
+
+### A. Save Current Note as Draft
+
+Command entry:
+
+- `mails-blog-obsidian-plugin/src/commands.ts`
+  - command id: `save-current-note-as-draft`
+  - requires an active `MarkdownView`
+  - errors with `Open a Markdown note first.` if no markdown file is active
+
+Plugin flow:
+
+1. Command calls `saveCurrentNoteAsDraft(...)`.
+2. `saveCurrentNoteAsDraft(...)` creates a `MailsBlogApiClient`.
+3. It calls `parseNoteMetadata(...)`.
+4. `parseNoteMetadata(...)`:
+   - reads the full note text from the vault
+   - reads frontmatter from `metadataCache`
+   - uses frontmatter `title` if present, otherwise falls back to file basename
+   - reads optional `category`, `tags`, `card_image`
+   - reads plugin binding fields such as `mails_blog_post_id`
+   - strips YAML frontmatter from the outgoing markdown body
+   - throws if the resulting body is empty
+5. The plugin builds a payload with:
+   - `title`
+   - `category` if present
+   - `tags` if present
+   - `card_image` if present
+   - `content_markdown`
+6. Decision point:
+   - if local frontmatter contains `mails_blog_post_id`, plugin calls `PATCH /api/posts/:id`
+   - otherwise plugin calls `POST /api/posts`
+7. Before the request, the client may refresh the plugin token if local expiry metadata is missing, invalid, or within 3 days of expiry.
+8. On success, plugin writes returned post fields back into frontmatter with `writePostBinding(...)`.
+9. Plugin shows `Draft saved to Mails Blog: <title>`.
+
+Backend route mapping:
+
+- `POST /api/posts`
+  - `mails-blog/src/pages/api/posts/index.ts`
+  - calls `createDraft(session, body)`
+- `PATCH /api/posts/:id`
+  - `mails-blog/src/pages/api/posts/[id].ts`
+  - calls `updateMyDraft(session, postID, body)`
+
+Backend draft behavior:
+
+- `createDraft(...)`
+  - ensures a blog author exists for the user
+  - normalizes title/metadata
+  - converts markdown into server-side `content_html` and `content_json`
+  - creates a new row in `posts`
+  - initial status is `draft`
+  - chooses a unique slug immediately, even before publish
+- `updateMyDraft(...)`
+  - if the target post is still `draft`, it updates the live draft fields directly
+  - if the target post is already `published`, it writes into `draft_*` fields and sets `has_unpublished_changes = 1`
+  - this means save-draft on a published post does not change the public post yet
+
+Important rules:
+
+- Draft/update selection is based only on local `mails_blog_post_id`.
+- The plugin does not try to re-find a post by slug or URL.
+- If local `mails_blog_post_id` is stale or wrong, save-draft will fail with the backend post lookup error.
+- Future AI should preserve this behavior unless deliberately adding a relink/recover flow.
+
+Local frontmatter side effects after success:
+
+- user-editable fields overwritten from server response:
+  - `title`
+  - `category`
+  - `tags`
+  - `card_image`
+- plugin-managed binding fields updated:
+  - `mails_blog_post_id`
+  - `mails_blog_slug`
+  - `mails_blog_url`
+  - `mails_blog_status`
+  - `mails_blog_author_slug`
+  - `mails_blog_updated_at`
+
+### B. Publish Current Note
+
+Command entry:
+
+- `mails-blog-obsidian-plugin/src/commands.ts`
+  - command id: `publish-current-note`
+  - requires an active `MarkdownView`
+
+Plugin flow:
+
+1. Command calls `publishCurrentNote(...)`.
+2. `publishCurrentNote(...)` first calls `saveCurrentNoteAsDraft(...)`.
+3. After draft save returns a post ID, plugin calls `POST /api/posts/:id/publish`.
+4. On success, plugin writes the returned post object back into frontmatter again.
+5. Plugin shows `Published to Mails Blog: <title>`.
+
+Backend route mapping:
+
+- `POST /api/posts/:id/publish`
+  - `mails-blog/src/pages/api/posts/[id]/publish.ts`
+  - calls `publishMyPost(session, postID)`
+  - then triggers:
+    - `notifyPostPublished(post)`
+    - `notifyAuthorSubscribers(post)`
+    - `warmPublicCacheAfterPublish(post)`
+
+Backend publish behavior:
+
+- If the post is still `draft`:
+  - current draft fields become the published post
+- If the post is already `published` and `has_unpublished_changes = 1`:
+  - `draft_*` fields are promoted into the live published fields
+  - `draft_*` fields are then cleared
+  - `has_unpublished_changes` is reset to `0`
+- A new slug may be generated from the current title during publish
+  - this can change the public URL when title changes
+- `published_at` and `updated_at` are set to the publish timestamp
+- tag indexes are synced through `syncPostTags(...)`
+- public cache revisions are bumped
+
+Important rules:
+
+- Publish always goes through save-draft first in the plugin.
+- There is no plugin path that publishes unsaved local edits directly.
+- Because publish can regenerate slug from title, future AI must not assume the old frontmatter URL stays stable after publish.
+- If you add a new publish-related feature, also review webhook, subscription, and cache warming side effects in `mails-blog`.
+
+### C. Unlink Current Note From Blog Post
+
+Command entry:
+
+- `mails-blog-obsidian-plugin/src/commands.ts`
+  - command id: `unlink-current-note`
+
+Plugin flow:
+
+1. Command calls `unlinkCurrentNote(...)`.
+2. `unlinkCurrentNote(...)` calls `clearPostBinding(...)`.
+3. Plugin removes only plugin-managed frontmatter keys.
+4. Plugin shows `Removed local Mails Blog binding from current note.`
+
+Important rules:
+
+- Unlink is local-only.
+- It does not delete or revoke the remote blog post.
+- It does not clear user-editable metadata like `title`, `category`, `tags`, or `card_image`.
+- After unlink, the next save-draft creates a new remote draft because `mails_blog_post_id` is gone.
+
+### D. Upload Image From Vault
+
+Command entry:
+
+- `mails-blog-obsidian-plugin/src/commands.ts`
+  - command id: `upload-image-from-vault`
+  - requires an active markdown editor view
+
+Plugin flow:
+
+1. Command opens `ImageFileSuggestModal`.
+2. The modal lists only vault files whose extension is:
+   - `png`
+   - `jpg`
+   - `jpeg`
+   - `webp`
+   - `gif`
+3. After user picks a file, plugin reads the binary from the vault.
+4. Plugin derives MIME type from file extension.
+5. Plugin calls `POST /api/uploads/images` as multipart form-data with field name `file`.
+6. Plugin also sends `X-Client-Time-Zone` based on the local IANA time zone.
+7. Backend returns:
+   - `asset_url`
+   - `markdown`
+   - `mime_type`
+   - `byte_size`
+   - `content_sha256`
+8. Plugin inserts returned `markdown` at the current editor selection.
+9. Plugin shows `Inserted image markdown for <file>`.
+
+Backend route mapping:
+
+- `POST /api/uploads/images`
+  - `mails-blog/src/pages/api/uploads/images.ts`
+  - calls `uploadImage(session, file, timeZone)`
+- `GET /api/uploads/images`
+  - already exists for listing assets
+  - not currently used by the plugin UI
+
+Backend upload behavior:
+
+- Auth goes through `withEditorSession(...)`, so Obsidian plugin token support already applies.
+- Server rejects:
+  - video uploads
+  - unsupported MIME types
+  - empty files
+  - files larger than 10 MB
+- Current daily upload limit is 20 images per author per resolved quota day.
+- Server deduplicates by `content_sha256` per author:
+  - if the same file content was already uploaded by the same author, it reuses the existing asset instead of creating a new object
+- New files are stored in `BLOG_MEDIA`
+- Returned markdown uses a default alt text derived from the stored file name
+
+Important rules:
+
+- The plugin currently supports only vault-file upload, not clipboard/paste upload.
+- The plugin trusts extension-to-MIME mapping on the client, but the server still validates MIME type.
+- If future AI adds new image types, update both:
+  - plugin picker/extension list
+  - backend `SUPPORTED_IMAGE_TYPES`
+
+### E. Shared Auth Behavior For All Write Flows
+
+All three mutation flows above rely on the same auth chain:
+
+1. Obsidian plugin sends `Authorization: Bearer <obsidian-plugin-token>` to `mails-blog`.
+2. `mails-blog` route uses `withEditorSession(...)`.
+3. `withEditorSession(...)` first attempts normal JWT auth with `ACCESS_TOKEN_SECRET`.
+4. On `401`, it falls back to plugin-token verification through `mails-chat-api /api/internal/auth/blog-plugin-token/verify`.
+5. That fallback requires:
+   - `mails-blog` `BLOG_CHAT_API_INTERNAL_TOKEN`
+   - matching `mails-chat-api` `INTERNAL_API_TOKEN`
+
+Future AI note:
+
+- If a new editor route should work for the plugin token, it must use `withEditorSession(...)`, not `withSession(...)`.
+
+## 15. Safe Extension Rules For Future AI
+
+If adding or changing plugin features, use these rules first:
+
+1. Change `main.ts` and `src/*` only.
+   - `main.js` is generated and must be rebuilt, not hand-edited.
+2. Treat frontmatter binding keys as the local link to remote post state.
+   - `mails_blog_post_id` is the primary remote identity.
+3. Do not silently change the meaning of unlink.
+   - it is currently local-only and users may rely on that
+4. If you add a new write route in `mails-blog`, prefer `withEditorSession(...)` if Obsidian should be able to call it.
+5. If you add a new media type or upload capability, update both plugin-side filtering and backend validation together.
+6. If you change token handling, update:
+   - plugin code
+   - `README.md`
+   - `AI_HANDOFF.md`
+   - packaged release docs under `release/mails-blog-publisher/`
+7. If you change auth behavior across repos, also re-check:
+   - `mails-blog`
+   - `mails-chat-api`
+   - token sync requirements documented in the repo docs
+
+Recommended edit points by feature:
+
+- new command:
+  - `src/commands.ts`
+  - usually `src/publish-service.ts`
+- new note metadata field:
+  - `src/constants.ts`
+  - `src/frontmatter.ts`
+  - payload shape in `src/publish-service.ts`
+- new blog API call:
+  - `src/api.ts`
+  - corresponding `mails-blog` route
+- new upload capability:
+  - `src/image-modal.ts` or new modal
+  - `src/publish-service.ts`
+  - `mails-blog/src/pages/api/uploads/*`
+  - `mails-blog/src/lib/media.ts`
+
+## 16. Fast Debugging Checklist
 
 If `Test Connection` fails:
 
@@ -518,6 +828,10 @@ If `Test Connection` fails:
 3. Check whether `GET /api/posts/me` returns:
    - `401`: token invalid/revoked/expired, or blog auth bridge is misconfigured
    - `500`: likely blog-side auth bridge/config regression
+4. If `Test Connection` succeeds but shows a refresh warning:
+   - current token auth is working
+   - refresh proxy or refresh backend path needs inspection
+   - first re-check `mails-blog /api/plugin-auth/refresh` and `mails-chat-api /api/auth/obsidian-token/refresh`
 4. Confirm `mails-blog` has:
    - `BLOG_CHAT_API_INTERNAL_TOKEN`
    - `CHAT_API_SERVICE` binding

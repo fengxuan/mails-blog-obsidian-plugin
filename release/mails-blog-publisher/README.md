@@ -19,6 +19,21 @@ For architecture, cross-repo auth flow, debugging notes, and current limitations
 - `Mails Blog: Unlink Current Note from Blog Post`
 - `Mails Blog: Upload Image from Vault`
 
+Command behavior summary:
+
+- `Save Current Note as Draft`
+  - creates a new remote draft when the note is not linked yet
+  - updates the existing remote post when `mails_blog_post_id` already exists in frontmatter
+- `Publish Current Note`
+  - always saves the current note as a draft first
+  - then publishes that remote post
+- `Unlink Current Note from Blog Post`
+  - removes only local plugin-managed binding keys from frontmatter
+  - does not delete the remote post
+- `Upload Image from Vault`
+  - uploads a supported image from the current vault
+  - inserts returned Markdown at the current cursor position
+
 ## Setup
 
 1. Generate a token in iOS `Settings -> Obsidian Plugin`.
@@ -28,6 +43,10 @@ For architecture, cross-repo auth flow, debugging notes, and current limitations
    - `Blog API Base URL`
    - `Obsidian Plugin Token`
 4. Run `Test Connection`.
+
+`Test Connection` now checks the current token first by reading `/api/posts/me`.
+If that succeeds and the stored expiry is missing, invalid, or within 3 days of expiry, the plugin then tries to rotate its own token and persist the refreshed token + expiry locally.
+If the read succeeds but the refresh path fails, the test still reports success and shows a warning so auth connectivity is not masked by token-rotation issues.
 
 After the first successful setup, the plugin will try to rotate its own token automatically and persist the refreshed token + expiry locally, so normal use should not require frequent manual copy/paste.
 Rotating a token in iOS only invalidates the previous token for the same device label. Tokens belonging to other devices stay active.
@@ -39,6 +58,38 @@ The plugin itself uses only the dedicated Obsidian plugin token copied from iOS.
 It does not directly use backend service secrets such as `INTERNAL_API_TOKEN`, `BLOG_CHAT_API_INTERNAL_TOKEN`, `ACCESS_TOKEN_SECRET`, or `INTERNAL_SERVICE_SECRET`.
 
 That means the recent removal of legacy `AUTH_SECRET` runtime usage does not require any plugin-side token migration.
+
+Backend dependencies that still matter for this plugin flow are:
+
+- `ACCESS_TOKEN_SECRET`
+  - shared by `mails-chat-api`, `mails-blog`, `mailsdev/worker`, and `mails-realtime-notify`
+  - used when `mails-blog` accepts a normal chat access token on editor routes
+- `BLOG_CHAT_API_INTERNAL_TOKEN`
+  - stored on `mails-blog`
+  - must match `mails-chat-api` `INTERNAL_API_TOKEN`
+  - used when `mails-blog` verifies Obsidian plugin tokens through `mails-chat-api`
+- `INTERNAL_SERVICE_SECRET`
+  - shared by `mails-chat-api` and `mails-blog`
+  - used for other internal blog service tokens such as subscription confirmation
+  - not used directly by the Obsidian plugin
+
+## Test Connection Behavior
+
+`Test Connection` is intentionally a lightweight auth smoke test, not a full publish simulation.
+
+What it proves:
+
+- the configured `Blog API Base URL` is reachable
+- the current bearer token can authenticate against `mails-blog` editor routes
+- `mails-blog` can verify the token either as a normal chat JWT or, more commonly here, through the Obsidian plugin token fallback
+
+What it does not prove:
+
+- image upload works
+- draft save or publish flows work end-to-end
+- backend refresh wiring is healthy, unless the token actually needs refresh and the warning/success message mentions it
+
+For the full command-to-backend architecture and future AI maintenance notes, see [AI_HANDOFF.md](./AI_HANDOFF.md).
 
 ## Manual Install
 

@@ -15,6 +15,12 @@ export interface PostListResponse {
   next_cursor: string | null;
 }
 
+export interface TestConnectionResult {
+  posts: PostListResponse;
+  tokenRefreshed: boolean;
+  refreshWarning: string | null;
+}
+
 export interface BlogPostResponse {
   post: BlogPost;
 }
