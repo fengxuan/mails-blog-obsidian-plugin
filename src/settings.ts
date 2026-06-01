@@ -16,8 +16,6 @@ export class MailsBlogSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Mails Blog Publisher" });
-
     new Setting(containerEl)
       .setName("Blog API Base URL")
       .setDesc("The Mails Blog API base URL.")
@@ -29,7 +27,6 @@ export class MailsBlogSettingTab extends PluginSettingTab {
             this.plugin.settings.blogApiBaseUrl = value.trim();
             await this.plugin.saveSettings();
           });
-        text.inputEl.style.width = "100%";
       });
 
     new Setting(containerEl)
@@ -44,7 +41,6 @@ export class MailsBlogSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
         text.inputEl.rows = 4;
-        text.inputEl.style.width = "100%";
       });
 
     const preview = containerEl.createDiv({ cls: "mails-blog-plugin-setting-help" });

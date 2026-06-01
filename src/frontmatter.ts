@@ -1,4 +1,4 @@
-import { TFile, type App } from "obsidian";
+import { stringifyYaml, TFile, type App } from "obsidian";
 import { FRONTMATTER_KEYS } from "./constants";
 import type { BlogPost, ParsedNoteMetadata } from "./types";
 
@@ -74,24 +74,6 @@ export async function computeMetadataSyncHash(metadata: Pick<ParsedNoteMetadata,
   return await computeSyncHash(serializeSyncSnapshot(metadata));
 }
 
-export function buildFrontmatter(content: string): string {
-  const trimmed = content.trim();
-  return trimmed ? `---\n${trimmed}\n---\n\n` : "";
-}
-
-export function renderFrontmatterValue(value: unknown): string {
-  if (typeof value === "string") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => JSON.stringify(String(item))).join(", ")}]`;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return JSON.stringify(String(value));
-}
-
 export async function replaceNoteWithPost(
   app: App,
   file: TFile,
@@ -126,14 +108,15 @@ export async function replaceNoteWithPost(
   frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   frontmatter[FRONTMATTER_KEYS.syncHash] = await computePostSyncHash(post);
 
-  const frontmatterEntries = Object.entries(frontmatter)
-    .filter(([, value]) => value !== undefined && value !== null && value !== "");
-  const frontmatterText = frontmatterEntries
-    .map(([key, value]) => `${key}: ${renderFrontmatterValue(value)}`)
-    .join("\n");
+  const frontmatterObject = Object.fromEntries(
+    Object.entries(frontmatter).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+  );
+  const frontmatterText = stringifyYaml(frontmatterObject).trim();
   const body = (post.content_markdown ?? "").trim();
-  const nextContent = `${buildFrontmatter(frontmatterText)}${body}${body ? "\n" : ""}`;
-  await app.vault.modify(file, nextContent);
+  const nextContent = frontmatterText
+    ? `---\n${frontmatterText}\n---\n\n${body}${body ? "\n" : ""}`
+    : `${body}${body ? "\n" : ""}`;
+  await app.vault.process(file, () => nextContent);
 }
 
 export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNoteMetadata> {

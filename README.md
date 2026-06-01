@@ -9,6 +9,7 @@ For architecture, cross-repo auth flow, debugging notes, and current limitations
 - Save the current note as a draft
 - Publish the current note
 - Update an already linked note and republish it
+- Sync a linked note back from Mails Blog with conflict protection
 - Upload an image from the vault and insert returned Markdown
 - Write blog binding fields back into note frontmatter
 
@@ -96,6 +97,21 @@ What it does not prove:
 
 For the full command-to-backend architecture and future AI maintenance notes, see [AI_HANDOFF.md](./AI_HANDOFF.md).
 
+## Network And Data Disclosure
+
+This plugin connects to the configured `Blog API Base URL` and sends:
+
+- your Obsidian plugin bearer token
+- the current note title, metadata, and markdown body
+- selected vault image files when you use the upload command
+
+This plugin writes back into the current note:
+
+- blog binding metadata in frontmatter
+- synchronized remote content when you run `Sync Current Note From Blog`
+
+The plugin does not collect analytics, does not bundle ads, and does not upload notes unless you explicitly run a publish, draft, sync, or image-upload command.
+
 ## Manual Install
 
 1. Build the plugin with `npm run build`.
@@ -125,6 +141,17 @@ The packaged release folder also includes:
 - `versions.json`
 
 It does not include local secrets such as `.env.local`.
+
+## Community Plugin Release Notes
+
+For Community Plugins submission:
+
+- the source repository should keep `manifest.json`, `README.md`, and `LICENSE`
+- release assets should include:
+  - `manifest.json`
+  - `main.js`
+  - `styles.css`
+- the GitHub release tag must exactly match `manifest.json` `version`
 
 ## Frontmatter
 
