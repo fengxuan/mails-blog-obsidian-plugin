@@ -1,6 +1,11 @@
 import esbuild from "esbuild";
+import { builtinModules } from "node:module";
 import process from "node:process";
-import builtins from "builtin-modules";
+
+const externalBuiltins = [
+  ...builtinModules,
+  ...builtinModules.map((moduleName) => moduleName.startsWith("node:") ? moduleName : `node:${moduleName}`),
+];
 
 const banner =
   "/* eslint-disable */\n" +
@@ -23,7 +28,7 @@ const context = await esbuild.context({
     "@codemirror/search",
     "@codemirror/state",
     "@codemirror/view",
-    ...builtins,
+    ...externalBuiltins,
   ],
   format: "cjs",
   target: "es2020",

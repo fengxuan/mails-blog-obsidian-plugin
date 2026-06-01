@@ -1,9 +1,9 @@
 {
   "id": "mails-blog-publisher",
   "name": "Mails Blog Publisher",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.5.0",
-  "description": "Publish the current note to Mails Blog using an Obsidian plugin token.",
+  "description": "Publish the current note to Mails Blog using a plugin token.",
   "author": "FengXuan",
   "authorUrl": "https://mails-blog.canyin.uk",
   "isDesktopOnly": false

@@ -1,6 +1,6 @@
-# Mails Blog Obsidian Plugin
+# Mails Blog Publisher
 
-Publish the current Obsidian note to Mails Blog using the dedicated Obsidian plugin token generated in the iOS app.
+Publish the current note to Mails Blog using the dedicated plugin token generated in the iOS app.
 
 For architecture, cross-repo auth flow, debugging notes, and current limitations, see [AI_HANDOFF.md](./AI_HANDOFF.md).
 
