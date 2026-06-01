@@ -1,6 +1,13 @@
 import { Notice, TFile, type App } from "obsidian";
 import { MailsBlogApiClient } from "./api";
-import { parseNoteMetadata, writePostBinding, clearPostBinding } from "./frontmatter";
+import {
+  clearPostBinding,
+  computeMetadataSyncHash,
+  computePostSyncHash,
+  parseNoteMetadata,
+  replaceNoteWithPost,
+  writePostBinding,
+} from "./frontmatter";
 import type { BlogImageUploadResponse, BlogPost, MailsBlogPluginSettings, PostPayload } from "./types";
 
 function buildPayload(metadata: Awaited<ReturnType<typeof parseNoteMetadata>>): PostPayload {
@@ -76,6 +83,70 @@ export async function publishCurrentNote(
 export async function unlinkCurrentNote(app: App, file: TFile): Promise<void> {
   await clearPostBinding(app, file);
   new Notice("Removed local Mails Blog binding from current note.");
+}
+
+export async function syncCurrentNoteFromBlog(
+  app: App,
+  file: TFile,
+  settings: MailsBlogPluginSettings,
+  onSettingsChanged: () => Promise<void> = async () => {},
+): Promise<BlogPost> {
+  const progressNotice = new Notice("Syncing current note from Mails Blog...", 0);
+  try {
+    const metadata = await parseNoteMetadata(app, file);
+    if (!metadata.postId) {
+      throw new Error("Current note is not linked to a Mails Blog post yet.");
+    }
+
+    const client = createClient(settings, onSettingsChanged);
+    const post = await client.getPost(metadata.postId);
+    const localHash = await computeMetadataSyncHash(metadata);
+    const remoteHash = await computePostSyncHash(post);
+    const storedHash = metadata.syncHash?.trim() ?? "";
+    const remoteChangedByTimestamp = (metadata.updatedAt?.trim() ?? "") !== post.updated_at;
+
+    if (localHash === remoteHash) {
+      await writePostBinding(app, file, post, settings.blogApiBaseUrl);
+      progressNotice.hide();
+      new Notice(`Current note already matches blog post: ${post.title}`);
+      return post;
+    }
+
+    if (!storedHash) {
+      if (!remoteChangedByTimestamp) {
+        progressNotice.hide();
+        throw new Error("Current note has local changes and no remote updates to pull. Publish it if you want to push those edits.");
+      }
+      throw new Error("Both local note and remote post may have changed. Publish local edits first or resolve manually before syncing.");
+    }
+
+    const localChangedSinceLastSync = localHash !== storedHash;
+    const remoteChangedSinceLastSync = remoteHash !== storedHash;
+
+    if (localChangedSinceLastSync && remoteChangedSinceLastSync) {
+      throw new Error("Sync stopped because both the local note and the remote blog post changed since the last sync.");
+    }
+
+    if (localChangedSinceLastSync && !remoteChangedSinceLastSync) {
+      progressNotice.hide();
+      throw new Error("Current note has local changes that are not on the blog. Publish first if you want to keep the local version.");
+    }
+
+    if (!remoteChangedSinceLastSync) {
+      await writePostBinding(app, file, post, settings.blogApiBaseUrl);
+      progressNotice.hide();
+      new Notice(`No remote changes to sync for: ${post.title}`);
+      return post;
+    }
+
+    await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
+    progressNotice.hide();
+    new Notice(`Synced current note from Mails Blog: ${post.title}`);
+    return post;
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
 }
 
 export async function uploadImageFromVault(

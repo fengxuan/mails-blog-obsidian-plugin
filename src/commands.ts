@@ -1,6 +1,12 @@
 import { MarkdownView, Notice, TFile, type App } from "obsidian";
 import { ImageFileSuggestModal } from "./image-modal";
-import { publishCurrentNote, saveCurrentNoteAsDraft, unlinkCurrentNote, uploadImageFromVault } from "./publish-service";
+import {
+  publishCurrentNote,
+  saveCurrentNoteAsDraft,
+  syncCurrentNoteFromBlog,
+  unlinkCurrentNote,
+  uploadImageFromVault,
+} from "./publish-service";
 import type { MailsBlogPluginSettings } from "./types";
 
 function getCurrentMarkdownFile(app: App): TFile {
@@ -71,6 +77,21 @@ export function registerCommands(
         await unlinkCurrentNote(app, file);
       } catch (error) {
         new Notice(error instanceof Error ? error.message : "Failed to unlink note.");
+      }
+    },
+  });
+
+  plugin.addCommand({
+    id: "sync-current-note-from-blog",
+    name: "Sync Current Note From Blog",
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await syncCurrentNoteFromBlog(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
       }
     },
   });

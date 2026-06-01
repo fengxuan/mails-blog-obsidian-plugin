@@ -30,6 +30,112 @@ function stripFrontmatter(content: string): string {
   return content.slice(match[0].length).trim();
 }
 
+function normalizeStringArray(values: string[] | undefined): string[] {
+  if (!values || values.length === 0) {
+    return [];
+  }
+  return values.map((value) => value.trim()).filter((value) => value.length > 0);
+}
+
+function serializeSyncSnapshot(input: {
+  title: string;
+  category?: string;
+  tags?: string[];
+  cardImage?: string;
+  body: string;
+}): string {
+  return JSON.stringify({
+    title: input.title.trim(),
+    category: input.category?.trim() ?? "",
+    tags: normalizeStringArray(input.tags),
+    cardImage: input.cardImage?.trim() ?? "",
+    body: input.body.trim(),
+  });
+}
+
+export async function computeSyncHash(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const digestBytes = new Uint8Array(digest);
+  return Array.from(digestBytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function computePostSyncHash(post: BlogPost): Promise<string> {
+  return await computeSyncHash(serializeSyncSnapshot({
+    title: post.title,
+    category: post.category ?? undefined,
+    tags: post.tags,
+    cardImage: post.card_image ?? undefined,
+    body: post.content_markdown ?? "",
+  }));
+}
+
+export async function computeMetadataSyncHash(metadata: Pick<ParsedNoteMetadata, "title" | "category" | "tags" | "cardImage" | "body">): Promise<string> {
+  return await computeSyncHash(serializeSyncSnapshot(metadata));
+}
+
+export function buildFrontmatter(content: string): string {
+  const trimmed = content.trim();
+  return trimmed ? `---\n${trimmed}\n---\n\n` : "";
+}
+
+export function renderFrontmatterValue(value: unknown): string {
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => JSON.stringify(String(item))).join(", ")}]`;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(String(value));
+}
+
+export async function replaceNoteWithPost(
+  app: App,
+  file: TFile,
+  post: BlogPost,
+  blogApiBaseUrl: string,
+): Promise<void> {
+  const cache = app.metadataCache.getFileCache(file);
+  const frontmatter = { ...(cache?.frontmatter ?? {}) } as Record<string, unknown>;
+
+  frontmatter[FRONTMATTER_KEYS.title] = post.title;
+  if (post.category) {
+    frontmatter[FRONTMATTER_KEYS.category] = post.category;
+  } else {
+    delete frontmatter[FRONTMATTER_KEYS.category];
+  }
+  if (post.tags.length > 0) {
+    frontmatter[FRONTMATTER_KEYS.tags] = post.tags;
+  } else {
+    delete frontmatter[FRONTMATTER_KEYS.tags];
+  }
+  if (post.card_image) {
+    frontmatter[FRONTMATTER_KEYS.cardImage] = post.card_image;
+  } else {
+    delete frontmatter[FRONTMATTER_KEYS.cardImage];
+  }
+
+  frontmatter[FRONTMATTER_KEYS.postId] = post.id;
+  frontmatter[FRONTMATTER_KEYS.slug] = post.slug;
+  frontmatter[FRONTMATTER_KEYS.status] = post.status;
+  frontmatter[FRONTMATTER_KEYS.authorSlug] = post.author_slug;
+  frontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
+  frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
+  frontmatter[FRONTMATTER_KEYS.syncHash] = await computePostSyncHash(post);
+
+  const frontmatterEntries = Object.entries(frontmatter)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "");
+  const frontmatterText = frontmatterEntries
+    .map(([key, value]) => `${key}: ${renderFrontmatterValue(value)}`)
+    .join("\n");
+  const body = (post.content_markdown ?? "").trim();
+  const nextContent = `${buildFrontmatter(frontmatterText)}${body}${body ? "\n" : ""}`;
+  await app.vault.modify(file, nextContent);
+}
+
 export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNoteMetadata> {
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
@@ -75,6 +181,9 @@ export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNo
     updatedAt: typeof frontmatter[FRONTMATTER_KEYS.updatedAt] === "string"
       ? frontmatter[FRONTMATTER_KEYS.updatedAt].trim()
       : undefined,
+    syncHash: typeof frontmatter[FRONTMATTER_KEYS.syncHash] === "string"
+      ? frontmatter[FRONTMATTER_KEYS.syncHash].trim()
+      : undefined,
     body,
   };
 }
@@ -110,6 +219,10 @@ export async function writePostBinding(
     frontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
     frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   });
+  const syncHash = await computePostSyncHash(post);
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    frontmatter[FRONTMATTER_KEYS.syncHash] = syncHash;
+  });
 }
 
 export async function clearPostBinding(app: App, file: TFile): Promise<void> {
@@ -125,5 +238,6 @@ export async function clearPostBinding(app: App, file: TFile): Promise<void> {
     delete frontmatter[FRONTMATTER_KEYS.status];
     delete frontmatter[FRONTMATTER_KEYS.authorSlug];
     delete frontmatter[FRONTMATTER_KEYS.updatedAt];
+    delete frontmatter[FRONTMATTER_KEYS.syncHash];
   });
 }

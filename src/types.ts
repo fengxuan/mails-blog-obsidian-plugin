@@ -71,5 +71,6 @@ export interface ParsedNoteMetadata {
   status?: string;
   authorSlug?: string;
   updatedAt?: string;
+  syncHash?: string;
   body: string;
 }

@@ -43,7 +43,8 @@ var FRONTMATTER_KEYS = {
   url: "mails_blog_url",
   status: "mails_blog_status",
   authorSlug: "mails_blog_author_slug",
-  updatedAt: "mails_blog_updated_at"
+  updatedAt: "mails_blog_updated_at",
+  syncHash: "mails_blog_sync_hash"
 };
 
 // src/commands.ts
@@ -282,6 +283,91 @@ function stripFrontmatter(content) {
   }
   return content.slice(match[0].length).trim();
 }
+function normalizeStringArray(values) {
+  if (!values || values.length === 0) {
+    return [];
+  }
+  return values.map((value) => value.trim()).filter((value) => value.length > 0);
+}
+function serializeSyncSnapshot(input) {
+  return JSON.stringify({
+    title: input.title.trim(),
+    category: input.category?.trim() ?? "",
+    tags: normalizeStringArray(input.tags),
+    cardImage: input.cardImage?.trim() ?? "",
+    body: input.body.trim()
+  });
+}
+async function computeSyncHash(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const digestBytes = new Uint8Array(digest);
+  return Array.from(digestBytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function computePostSyncHash(post) {
+  return await computeSyncHash(serializeSyncSnapshot({
+    title: post.title,
+    category: post.category ?? void 0,
+    tags: post.tags,
+    cardImage: post.card_image ?? void 0,
+    body: post.content_markdown ?? ""
+  }));
+}
+async function computeMetadataSyncHash(metadata) {
+  return await computeSyncHash(serializeSyncSnapshot(metadata));
+}
+function buildFrontmatter(content) {
+  const trimmed = content.trim();
+  return trimmed ? `---
+${trimmed}
+---
+
+` : "";
+}
+function renderFrontmatterValue(value) {
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => JSON.stringify(String(item))).join(", ")}]`;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(String(value));
+}
+async function replaceNoteWithPost(app, file, post, blogApiBaseUrl) {
+  const cache = app.metadataCache.getFileCache(file);
+  const frontmatter = { ...cache?.frontmatter ?? {} };
+  frontmatter[FRONTMATTER_KEYS.title] = post.title;
+  if (post.category) {
+    frontmatter[FRONTMATTER_KEYS.category] = post.category;
+  } else {
+    delete frontmatter[FRONTMATTER_KEYS.category];
+  }
+  if (post.tags.length > 0) {
+    frontmatter[FRONTMATTER_KEYS.tags] = post.tags;
+  } else {
+    delete frontmatter[FRONTMATTER_KEYS.tags];
+  }
+  if (post.card_image) {
+    frontmatter[FRONTMATTER_KEYS.cardImage] = post.card_image;
+  } else {
+    delete frontmatter[FRONTMATTER_KEYS.cardImage];
+  }
+  frontmatter[FRONTMATTER_KEYS.postId] = post.id;
+  frontmatter[FRONTMATTER_KEYS.slug] = post.slug;
+  frontmatter[FRONTMATTER_KEYS.status] = post.status;
+  frontmatter[FRONTMATTER_KEYS.authorSlug] = post.author_slug;
+  frontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
+  frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
+  frontmatter[FRONTMATTER_KEYS.syncHash] = await computePostSyncHash(post);
+  const frontmatterEntries = Object.entries(frontmatter).filter(([, value]) => value !== void 0 && value !== null && value !== "");
+  const frontmatterText = frontmatterEntries.map(([key, value]) => `${key}: ${renderFrontmatterValue(value)}`).join("\n");
+  const body = (post.content_markdown ?? "").trim();
+  const nextContent = `${buildFrontmatter(frontmatterText)}${body}${body ? "\n" : ""}`;
+  await app.vault.modify(file, nextContent);
+}
 async function parseNoteMetadata(app, file) {
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
@@ -307,6 +393,7 @@ async function parseNoteMetadata(app, file) {
     status: typeof frontmatter[FRONTMATTER_KEYS.status] === "string" ? frontmatter[FRONTMATTER_KEYS.status].trim() : void 0,
     authorSlug: typeof frontmatter[FRONTMATTER_KEYS.authorSlug] === "string" ? frontmatter[FRONTMATTER_KEYS.authorSlug].trim() : void 0,
     updatedAt: typeof frontmatter[FRONTMATTER_KEYS.updatedAt] === "string" ? frontmatter[FRONTMATTER_KEYS.updatedAt].trim() : void 0,
+    syncHash: typeof frontmatter[FRONTMATTER_KEYS.syncHash] === "string" ? frontmatter[FRONTMATTER_KEYS.syncHash].trim() : void 0,
     body
   };
 }
@@ -335,6 +422,10 @@ async function writePostBinding(app, file, post, blogApiBaseUrl) {
     frontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
     frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   });
+  const syncHash = await computePostSyncHash(post);
+  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    frontmatter[FRONTMATTER_KEYS.syncHash] = syncHash;
+  });
 }
 async function clearPostBinding(app, file) {
   const existingFrontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
@@ -348,6 +439,7 @@ async function clearPostBinding(app, file) {
     delete frontmatter[FRONTMATTER_KEYS.status];
     delete frontmatter[FRONTMATTER_KEYS.authorSlug];
     delete frontmatter[FRONTMATTER_KEYS.updatedAt];
+    delete frontmatter[FRONTMATTER_KEYS.syncHash];
   });
 }
 
@@ -411,6 +503,57 @@ async function publishCurrentNote(app, file, settings, onSettingsChanged = async
 async function unlinkCurrentNote(app, file) {
   await clearPostBinding(app, file);
   new import_obsidian3.Notice("Removed local Mails Blog binding from current note.");
+}
+async function syncCurrentNoteFromBlog(app, file, settings, onSettingsChanged = async () => {
+}) {
+  const progressNotice = new import_obsidian3.Notice("Syncing current note from Mails Blog...", 0);
+  try {
+    const metadata = await parseNoteMetadata(app, file);
+    if (!metadata.postId) {
+      throw new Error("Current note is not linked to a Mails Blog post yet.");
+    }
+    const client = createClient(settings, onSettingsChanged);
+    const post = await client.getPost(metadata.postId);
+    const localHash = await computeMetadataSyncHash(metadata);
+    const remoteHash = await computePostSyncHash(post);
+    const storedHash = metadata.syncHash?.trim() ?? "";
+    const remoteChangedByTimestamp = (metadata.updatedAt?.trim() ?? "") !== post.updated_at;
+    if (localHash === remoteHash) {
+      await writePostBinding(app, file, post, settings.blogApiBaseUrl);
+      progressNotice.hide();
+      new import_obsidian3.Notice(`Current note already matches blog post: ${post.title}`);
+      return post;
+    }
+    if (!storedHash) {
+      if (!remoteChangedByTimestamp) {
+        progressNotice.hide();
+        throw new Error("Current note has local changes and no remote updates to pull. Publish it if you want to push those edits.");
+      }
+      throw new Error("Both local note and remote post may have changed. Publish local edits first or resolve manually before syncing.");
+    }
+    const localChangedSinceLastSync = localHash !== storedHash;
+    const remoteChangedSinceLastSync = remoteHash !== storedHash;
+    if (localChangedSinceLastSync && remoteChangedSinceLastSync) {
+      throw new Error("Sync stopped because both the local note and the remote blog post changed since the last sync.");
+    }
+    if (localChangedSinceLastSync && !remoteChangedSinceLastSync) {
+      progressNotice.hide();
+      throw new Error("Current note has local changes that are not on the blog. Publish first if you want to keep the local version.");
+    }
+    if (!remoteChangedSinceLastSync) {
+      await writePostBinding(app, file, post, settings.blogApiBaseUrl);
+      progressNotice.hide();
+      new import_obsidian3.Notice(`No remote changes to sync for: ${post.title}`);
+      return post;
+    }
+    await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
+    progressNotice.hide();
+    new import_obsidian3.Notice(`Synced current note from Mails Blog: ${post.title}`);
+    return post;
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
 }
 async function uploadImageFromVault(app, file, settings, onSettingsChanged = async () => {
 }) {
@@ -498,6 +641,20 @@ function registerCommands(app, plugin) {
         await unlinkCurrentNote(app, file);
       } catch (error) {
         new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to unlink note.");
+      }
+    }
+  });
+  plugin.addCommand({
+    id: "sync-current-note-from-blog",
+    name: "Sync Current Note From Blog",
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await syncCurrentNoteFromBlog(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
       }
     }
   });

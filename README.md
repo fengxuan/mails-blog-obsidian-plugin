@@ -16,6 +16,7 @@ For architecture, cross-repo auth flow, debugging notes, and current limitations
 
 - `Mails Blog: Save Current Note as Draft`
 - `Mails Blog: Publish Current Note`
+- `Mails Blog: Sync Current Note From Blog`
 - `Mails Blog: Unlink Current Note from Blog Post`
 - `Mails Blog: Upload Image from Vault`
 
@@ -27,6 +28,10 @@ Command behavior summary:
 - `Publish Current Note`
   - always saves the current note as a draft first
   - then publishes that remote post
+- `Sync Current Note From Blog`
+  - pulls the linked remote post back into the current note
+  - only overwrites automatically when the remote post changed and the local note has not changed since the last sync/save/publish
+  - stops with a conflict notice when both local and remote changed
 - `Unlink Current Note from Blog Post`
   - removes only local plugin-managed binding keys from frontmatter
   - does not delete the remote post
@@ -138,8 +143,29 @@ Plugin-managed binding fields:
 - `mails_blog_status`
 - `mails_blog_author_slug`
 - `mails_blog_updated_at`
+- `mails_blog_sync_hash`
 
 The plugin strips YAML frontmatter from the note body before sending `content_markdown` to Mails Blog.
+
+## Sync Behavior
+
+If the blog post was updated elsewhere and Obsidian has not been updated yet, run:
+
+- `Mails Blog: Sync Current Note From Blog`
+
+The plugin uses:
+
+- `mails_blog_updated_at` as the remote version timestamp
+- `mails_blog_sync_hash` as the last synchronized content snapshot
+
+Safety rules:
+
+- remote changed, local unchanged:
+  - plugin replaces the current note with the remote blog content
+- local changed, remote unchanged:
+  - plugin keeps the local note and asks you to publish if you want to push it
+- local changed and remote changed:
+  - plugin stops with a conflict notice instead of overwriting either side
 
 ## Image Upload
 

@@ -17,4 +17,5 @@ export const FRONTMATTER_KEYS = {
   status: "mails_blog_status",
   authorSlug: "mails_blog_author_slug",
   updatedAt: "mails_blog_updated_at",
+  syncHash: "mails_blog_sync_hash",
 } as const;
