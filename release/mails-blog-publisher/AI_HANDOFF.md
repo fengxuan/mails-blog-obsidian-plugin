@@ -2,8 +2,10 @@
 
 This document is for future AI/dev work on the Obsidian publishing flow.
 It describes the current architecture, cross-repo dependencies, API calls, known limitations, and the fastest debugging entry points.
+`README.md` is intentionally user-facing and should stay focused on install, setup, and note publishing.
+Token internals, auth flow, release plumbing, and debugging details belong here instead.
 
-Last reviewed: 2026-06-01
+Last reviewed: 2026-06-02
 
 ## 1. Scope
 
