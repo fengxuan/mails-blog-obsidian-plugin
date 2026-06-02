@@ -242,7 +242,7 @@ The plugin does not currently send:
 - `content_html`
 - `content_json`
 
-Those are derived server-side by `mails-blog`.
+Those are derived server-side by `mails-blog`, and `content_json` is no longer part of the public response contract.
 
 ## 8. Token Lifecycle
 
@@ -603,7 +603,7 @@ Backend draft behavior:
 - `createDraft(...)`
   - ensures a blog author exists for the user
   - normalizes title/metadata
-  - converts markdown into server-side `content_html` and `content_json`
+  - converts markdown into server-side `content_html` and internal `content_json`
   - creates a new row in `posts`
   - initial status is `draft`
   - chooses a unique slug immediately, even before publish

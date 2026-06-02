@@ -39,7 +39,6 @@ export interface BlogPost {
   updated_at: string;
   content_markdown: string | null;
   content_html: string;
-  content_json: string;
   has_unpublished_changes: boolean;
   is_pinned: boolean;
 }
