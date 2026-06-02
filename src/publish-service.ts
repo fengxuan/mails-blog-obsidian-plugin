@@ -149,39 +149,24 @@ export async function syncCurrentNoteFromBlog(
   }
 }
 
-export async function uploadImageFromVault(
-  app: App,
-  file: TFile,
+export async function uploadImageFile(
+  file: {
+    data: ArrayBuffer;
+    mimeType: string;
+    name: string;
+  },
   settings: MailsBlogPluginSettings,
   onSettingsChanged: () => Promise<void> = async () => {},
 ): Promise<BlogImageUploadResponse> {
   const progressNotice = new Notice(`Uploading image: ${file.name}...`, 0);
   try {
-    const binary = await app.vault.readBinary(file);
-    const mimeType = guessMimeType(file.extension);
     const client = createClient(settings, onSettingsChanged);
-    const uploaded = await client.uploadImage(binary, file.name, mimeType);
+    const uploaded = await client.uploadImage(file.data, file.name, file.mimeType);
     progressNotice.hide();
     new Notice(`Uploaded image: ${file.name}`);
     return uploaded;
   } catch (error) {
     progressNotice.hide();
     throw error;
-  }
-}
-
-function guessMimeType(extension: string): string {
-  switch (extension.toLowerCase()) {
-    case "png":
-      return "image/png";
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "webp":
-      return "image/webp";
-    case "gif":
-      return "image/gif";
-    default:
-      return "application/octet-stream";
   }
 }

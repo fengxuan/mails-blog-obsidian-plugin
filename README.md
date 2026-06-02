@@ -69,7 +69,7 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
 2. Save a draft to create or update the linked remote post.
 3. Publish when you are ready to make it live.
 4. Use `Sync Current Note From Blog` if the remote post changed elsewhere.
-5. Use `Upload Image from Vault` to insert uploaded image Markdown into the current note.
+5. Use `Upload Image` to choose a local image file and insert uploaded image Markdown into the current note.
 
 ## Other Commands
 
@@ -77,8 +77,8 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
   - pulls the linked blog post back into the current note when it is safe to do so
 - `Mails Blog: Unlink Current Note from Blog Post`
   - removes only the local link to the remote post
-- `Mails Blog: Upload Image from Vault`
-  - supports `jpg`, `jpeg`, `png`, `webp`, and `gif`
+- `Mails Blog: Upload Image`
+  - choose a local `jpg`, `jpeg`, `png`, `webp`, or `gif` image file to upload
 
 ## Notes
 
@@ -89,14 +89,13 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
 ## Current Limitations
 
 - Token generation currently starts in the Mails iOS app.
-- Image upload currently supports vault files only.
 - Supported image formats are `jpg`, `jpeg`, `png`, `webp`, and `gif`.
 - When both the local note and the remote post changed, sync stops instead of trying to merge them automatically.
 
 ## Privacy And Network Use
 
 - This plugin connects to your configured `Blog API Base URL`.
-- It sends your plugin token, note title, frontmatter metadata, note body, and selected vault images only when you run publish, draft, sync, or image upload commands.
+- It sends your plugin token, note title, frontmatter metadata, note body, and the image file you explicitly choose only when you run publish, draft, sync, or image upload commands.
 - It writes blog binding metadata back into note frontmatter and can replace the current note when you run `Sync Current Note From Blog`.
 - It does not include ads or telemetry.
 

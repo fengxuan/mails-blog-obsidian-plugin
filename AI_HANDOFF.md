@@ -102,7 +102,7 @@ Registers four commands:
 - `Save Current Note as Draft`
 - `Publish Current Note`
 - `Unlink Current Note from Blog Post`
-- `Upload Image from Vault`
+- `Upload Image`
 
 ### `src/publish-service.ts`
 
@@ -119,9 +119,9 @@ Main orchestration layer.
   - Writes final binding metadata back again.
 - `unlinkCurrentNote(...)`
   - Removes only plugin-managed binding keys from frontmatter.
-- `uploadImageFromVault(...)`
-  - Reads a vault file as binary.
-  - Detects MIME type from extension.
+- `uploadImageFile(...)`
+  - Reads the explicitly selected image file in memory.
+  - Validates or normalizes MIME type from the selected file.
   - Calls blog image upload API.
 
 ### `src/frontmatter.ts`
@@ -163,10 +163,10 @@ Contains:
 - default API URL: `https://mails-blog.canyin.uk`
 - frontmatter key names
 
-### `src/image-modal.ts`
+### Image selection in `src/commands.ts`
 
-- Opens a fuzzy picker over image files in the current vault.
-- Supported extensions:
+- Opens the system file picker instead of enumerating vault files.
+- Accepts:
   - `png`
   - `jpg`
   - `jpeg`
@@ -520,7 +520,7 @@ Relevant files:
 
 - `mails-blog/src/pages/api/uploads/images.ts`
 - `mails-blog/src/lib/media.ts`
-- `mails-blog-obsidian-plugin/src/image-modal.ts`
+- `mails-blog-obsidian-plugin/src/commands.ts`
 - `mails-blog-obsidian-plugin/src/publish-service.ts`
 
 Current behavior:
@@ -702,7 +702,7 @@ Important rules:
 - It does not clear user-editable metadata like `title`, `category`, `tags`, or `card_image`.
 - After unlink, the next save-draft creates a new remote draft because `mails_blog_post_id` is gone.
 
-### D. Upload Image From Vault
+### D. Upload Image
 
 Command entry:
 
@@ -712,15 +712,15 @@ Command entry:
 
 Plugin flow:
 
-1. Command opens `ImageFileSuggestModal`.
-2. The modal lists only vault files whose extension is:
+1. Command opens the system file picker.
+2. User explicitly chooses a local image file.
+3. Plugin validates the selected type against:
    - `png`
    - `jpg`
    - `jpeg`
    - `webp`
    - `gif`
-3. After user picks a file, plugin reads the binary from the vault.
-4. Plugin derives MIME type from file extension.
+4. Plugin reads the selected file as binary in memory.
 5. Plugin calls `POST /api/uploads/images` as multipart form-data with field name `file`.
 6. Plugin also sends `X-Client-Time-Zone` based on the local IANA time zone.
 7. Backend returns:
@@ -757,8 +757,8 @@ Backend upload behavior:
 
 Important rules:
 
-- The plugin currently supports only vault-file upload, not clipboard/paste upload.
-- The plugin trusts extension-to-MIME mapping on the client, but the server still validates MIME type.
+- The plugin currently supports only explicit local file selection, not clipboard/paste upload.
+- The plugin validates the selected image type on the client, but the server still validates MIME type.
 - If future AI adds new image types, update both:
   - plugin picker/extension list
   - backend `SUPPORTED_IMAGE_TYPES`
@@ -814,7 +814,7 @@ Recommended edit points by feature:
   - `src/api.ts`
   - corresponding `mails-blog` route
 - new upload capability:
-  - `src/image-modal.ts` or new modal
+  - `src/commands.ts`
   - `src/publish-service.ts`
   - `mails-blog/src/pages/api/uploads/*`
   - `mails-blog/src/lib/media.ts`

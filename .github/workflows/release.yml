@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  attestations: write
+  id-token: write
 
 jobs:
   release:
@@ -67,10 +69,20 @@ jobs:
       - name: Build release assets
         run: npm run release:package
 
-      - name: Create release zip
-        run: |
-          cd release
-          zip -r "mails-blog-publisher-${RELEASE_TAG}.zip" mails-blog-publisher
+      - name: Attest manifest.json
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/mails-blog-publisher/manifest.json
+
+      - name: Attest main.js
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/mails-blog-publisher/main.js
+
+      - name: Attest styles.css
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/mails-blog-publisher/styles.css
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -82,4 +94,3 @@ jobs:
             release/mails-blog-publisher/manifest.json
             release/mails-blog-publisher/main.js
             release/mails-blog-publisher/styles.css
-            release/mails-blog-publisher-${{ env.RELEASE_TAG }}.zip

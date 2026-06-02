@@ -25,7 +25,7 @@ __export(main_exports, {
   default: () => MailsBlogPublisherPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian7 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/constants.ts
 var DEFAULT_SETTINGS = {
@@ -48,33 +48,13 @@ var FRONTMATTER_KEYS = {
 };
 
 // src/commands.ts
-var import_obsidian5 = require("obsidian");
-
-// src/image-modal.ts
-var import_obsidian = require("obsidian");
-var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "webp", "gif"]);
-var ImageFileSuggestModal = class extends import_obsidian.FuzzySuggestModal {
-  constructor(app, onChoose) {
-    super(app);
-    this.onChoose = onChoose;
-    this.setPlaceholder("Select an image from your vault");
-  }
-  getItems() {
-    return this.app.vault.getFiles().filter((file) => IMAGE_EXTENSIONS.has(file.extension.toLowerCase()));
-  }
-  getItemText(item) {
-    return item.path;
-  }
-  onChooseItem(item) {
-    this.onChoose(item);
-  }
-};
-
-// src/publish-service.ts
 var import_obsidian4 = require("obsidian");
 
+// src/publish-service.ts
+var import_obsidian3 = require("obsidian");
+
 // src/api.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian = require("obsidian");
 var MailsBlogApiError = class extends Error {
   constructor(message, status) {
     super(message);
@@ -133,7 +113,7 @@ var MailsBlogApiClient = class {
     const token = this.requireToken();
     const boundary = `Boundary-${crypto.randomUUID()}`;
     const body = createMultipartBody(boundary, "file", filename, mimeType, data);
-    const response = await (0, import_obsidian2.requestUrl)({
+    const response = await (0, import_obsidian.requestUrl)({
       url: `${blogApiBaseUrl}/api/uploads/images`,
       method: "POST",
       headers: {
@@ -167,7 +147,7 @@ var MailsBlogApiClient = class {
     if (body !== void 0) {
       headers["Content-Type"] = "application/json";
     }
-    const response = await (0, import_obsidian2.requestUrl)({
+    const response = await (0, import_obsidian.requestUrl)({
       url: `${blogApiBaseUrl}${path}`,
       method,
       headers,
@@ -220,7 +200,7 @@ var MailsBlogApiClient = class {
   }
   async refreshToken(currentToken) {
     const blogApiBaseUrl = this.requireBaseUrl();
-    const response = await (0, import_obsidian2.requestUrl)({
+    const response = await (0, import_obsidian.requestUrl)({
       url: `${blogApiBaseUrl}/api/plugin-auth/refresh`,
       method: "POST",
       headers: {
@@ -265,7 +245,7 @@ function escapeQuotes(value) {
 }
 
 // src/frontmatter.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian2 = require("obsidian");
 function normalizeTags(input) {
   if (Array.isArray(input)) {
     const tags = input.map((value) => String(value).trim()).filter((value) => value.length > 0);
@@ -346,7 +326,7 @@ async function replaceNoteWithPost(app, file, post, blogApiBaseUrl) {
   const frontmatterObject = Object.fromEntries(
     Object.entries(frontmatter).filter(([, value]) => value !== void 0 && value !== null && value !== "")
   );
-  const frontmatterText = (0, import_obsidian3.stringifyYaml)(frontmatterObject).trim();
+  const frontmatterText = (0, import_obsidian2.stringifyYaml)(frontmatterObject).trim();
   const body = (post.content_markdown ?? "").trim();
   const nextContent = frontmatterText ? `---
 ${frontmatterText}
@@ -456,7 +436,7 @@ function createClient(settings, onSettingsChanged) {
 }
 async function saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian4.Notice("Saving draft to Mails Blog...", 0);
+  const progressNotice = new import_obsidian3.Notice("Saving draft to Mails Blog...", 0);
   const client = createClient(settings, onSettingsChanged);
   try {
     const metadata = await parseNoteMetadata(app, file);
@@ -464,7 +444,7 @@ async function saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged = a
     const post = metadata.postId ? await client.updateDraft(metadata.postId, payload) : await client.createDraft(payload);
     await writePostBinding(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new import_obsidian4.Notice(`Draft saved to Mails Blog: ${post.title}`);
+    new import_obsidian3.Notice(`Draft saved to Mails Blog: ${post.title}`);
     return post;
   } catch (error) {
     progressNotice.hide();
@@ -473,14 +453,14 @@ async function saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged = a
 }
 async function publishCurrentNote(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian4.Notice("Publishing current note to Mails Blog...", 0);
+  const progressNotice = new import_obsidian3.Notice("Publishing current note to Mails Blog...", 0);
   try {
     const draft = await saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged);
     const client = createClient(settings, onSettingsChanged);
     const post = await client.publish(draft.id);
     await writePostBinding(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new import_obsidian4.Notice(`Published to Mails Blog: ${post.title}`);
+    new import_obsidian3.Notice(`Published to Mails Blog: ${post.title}`);
     return post;
   } catch (error) {
     progressNotice.hide();
@@ -489,11 +469,11 @@ async function publishCurrentNote(app, file, settings, onSettingsChanged = async
 }
 async function unlinkCurrentNote(app, file) {
   await clearPostBinding(app, file);
-  new import_obsidian4.Notice("Removed local Mails Blog binding from current note.");
+  new import_obsidian3.Notice("Removed local Mails Blog binding from current note.");
 }
 async function syncCurrentNoteFromBlog(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian4.Notice("Syncing current note from Mails Blog...", 0);
+  const progressNotice = new import_obsidian3.Notice("Syncing current note from Mails Blog...", 0);
   try {
     const metadata = await parseNoteMetadata(app, file);
     if (!metadata.postId) {
@@ -508,7 +488,7 @@ async function syncCurrentNoteFromBlog(app, file, settings, onSettingsChanged = 
     if (localHash === remoteHash) {
       await writePostBinding(app, file, post, settings.blogApiBaseUrl);
       progressNotice.hide();
-      new import_obsidian4.Notice(`Current note already matches blog post: ${post.title}`);
+      new import_obsidian3.Notice(`Current note already matches blog post: ${post.title}`);
       return post;
     }
     if (!storedHash) {
@@ -530,53 +510,36 @@ async function syncCurrentNoteFromBlog(app, file, settings, onSettingsChanged = 
     if (!remoteChangedSinceLastSync) {
       await writePostBinding(app, file, post, settings.blogApiBaseUrl);
       progressNotice.hide();
-      new import_obsidian4.Notice(`No remote changes to sync for: ${post.title}`);
+      new import_obsidian3.Notice(`No remote changes to sync for: ${post.title}`);
       return post;
     }
     await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new import_obsidian4.Notice(`Synced current note from Mails Blog: ${post.title}`);
+    new import_obsidian3.Notice(`Synced current note from Mails Blog: ${post.title}`);
     return post;
   } catch (error) {
     progressNotice.hide();
     throw error;
   }
 }
-async function uploadImageFromVault(app, file, settings, onSettingsChanged = async () => {
+async function uploadImageFile(file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian4.Notice(`Uploading image: ${file.name}...`, 0);
+  const progressNotice = new import_obsidian3.Notice(`Uploading image: ${file.name}...`, 0);
   try {
-    const binary = await app.vault.readBinary(file);
-    const mimeType = guessMimeType(file.extension);
     const client = createClient(settings, onSettingsChanged);
-    const uploaded = await client.uploadImage(binary, file.name, mimeType);
+    const uploaded = await client.uploadImage(file.data, file.name, file.mimeType);
     progressNotice.hide();
-    new import_obsidian4.Notice(`Uploaded image: ${file.name}`);
+    new import_obsidian3.Notice(`Uploaded image: ${file.name}`);
     return uploaded;
   } catch (error) {
     progressNotice.hide();
     throw error;
   }
 }
-function guessMimeType(extension) {
-  switch (extension.toLowerCase()) {
-    case "png":
-      return "image/png";
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "webp":
-      return "image/webp";
-    case "gif":
-      return "image/gif";
-    default:
-      return "application/octet-stream";
-  }
-}
 
 // src/commands.ts
 function getCurrentMarkdownFile(app) {
-  const activeView = app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
+  const activeView = app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
   const file = activeView?.file;
   if (!file) {
     throw new Error("Open a Markdown note first.");
@@ -584,7 +547,7 @@ function getCurrentMarkdownFile(app) {
   return file;
 }
 function getCurrentMarkdownView(app) {
-  const activeView = app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
+  const activeView = app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
   if (!activeView) {
     throw new Error("Open a Markdown note first.");
   }
@@ -601,7 +564,7 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian5.Notice(error instanceof Error ? error.message : "Failed to save draft.");
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to save draft.");
       }
     }
   });
@@ -615,7 +578,7 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian5.Notice(error instanceof Error ? error.message : "Failed to publish note.");
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to publish note.");
       }
     }
   });
@@ -627,7 +590,7 @@ function registerCommands(app, plugin) {
         const file = getCurrentMarkdownFile(app);
         await unlinkCurrentNote(app, file);
       } catch (error) {
-        new import_obsidian5.Notice(error instanceof Error ? error.message : "Failed to unlink note.");
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to unlink note.");
       }
     }
   });
@@ -641,37 +604,116 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian5.Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
       }
     }
   });
   plugin.addCommand({
     id: "upload-image-from-vault",
-    name: "Upload Image from Vault",
+    name: "Upload Image",
     callback: async () => {
       try {
         const view = getCurrentMarkdownView(app);
-        new ImageFileSuggestModal(app, async (imageFile) => {
-          try {
-            const uploaded = await uploadImageFromVault(app, imageFile, plugin.settings, async () => {
-              await plugin.saveSettings();
-            });
-            view.editor.replaceSelection(uploaded.markdown);
-            new import_obsidian5.Notice(`Inserted image markdown for ${imageFile.name}`);
-          } catch (error) {
-            new import_obsidian5.Notice(error instanceof Error ? error.message : "Failed to upload image.");
-          }
-        }).open();
+        const imageFile = await promptForImageFile();
+        if (!imageFile) {
+          return;
+        }
+        const uploaded = await uploadImageFile(imageFile, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+        view.editor.replaceSelection(uploaded.markdown);
+        new import_obsidian4.Notice(`Inserted image markdown for ${imageFile.name}`);
       } catch (error) {
-        new import_obsidian5.Notice(error instanceof Error ? error.message : "Failed to open image picker.");
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to upload image.");
       }
     }
   });
 }
+function promptForImageFile() {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif";
+    input.style.display = "none";
+    document.body.appendChild(input);
+    const cleanup = () => {
+      window.removeEventListener("focus", onWindowFocus, true);
+      input.remove();
+    };
+    const onWindowFocus = () => {
+      window.setTimeout(() => {
+        if (input.files?.length) {
+          return;
+        }
+        cleanup();
+        resolve(null);
+      }, 0);
+    };
+    input.addEventListener(
+      "change",
+      async () => {
+        try {
+          const file = input.files?.item(0);
+          if (!file) {
+            cleanup();
+            resolve(null);
+            return;
+          }
+          const mimeType = normalizeSelectedFileMimeType(file);
+          if (!mimeType) {
+            throw new Error("Please select a jpg, jpeg, png, webp, or gif image.");
+          }
+          const data = await file.arrayBuffer();
+          cleanup();
+          resolve({
+            data,
+            mimeType,
+            name: file.name
+          });
+        } catch (error) {
+          cleanup();
+          reject(error);
+        }
+      },
+      { once: true }
+    );
+    window.addEventListener("focus", onWindowFocus, true);
+    input.click();
+  });
+}
+function normalizeSelectedFileMimeType(file) {
+  const normalizedType = file.type.trim().toLowerCase();
+  if (normalizedType === "image/png") {
+    return normalizedType;
+  }
+  if (normalizedType === "image/jpeg") {
+    return normalizedType;
+  }
+  if (normalizedType === "image/webp") {
+    return normalizedType;
+  }
+  if (normalizedType === "image/gif") {
+    return normalizedType;
+  }
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    default:
+      return null;
+  }
+}
 
 // src/settings.ts
-var import_obsidian6 = require("obsidian");
-var MailsBlogSettingTab = class extends import_obsidian6.PluginSettingTab {
+var import_obsidian5 = require("obsidian");
+var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -679,13 +721,13 @@ var MailsBlogSettingTab = class extends import_obsidian6.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian6.Setting(containerEl).setName("Blog API Base URL").setDesc("The Mails Blog API base URL.").addText((text) => {
+    new import_obsidian5.Setting(containerEl).setName("Blog API Base URL").setDesc("The Mails Blog API base URL.").addText((text) => {
       text.setPlaceholder("https://mails-blog.canyin.uk").setValue(this.plugin.settings.blogApiBaseUrl).onChange(async (value) => {
         this.plugin.settings.blogApiBaseUrl = value.trim();
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian6.Setting(containerEl).setName("Obsidian Plugin Token").setDesc("Generate this token in iOS Settings -> Obsidian Plugin, then paste it here.").addTextArea((text) => {
+    new import_obsidian5.Setting(containerEl).setName("Obsidian Plugin Token").setDesc("Generate this token in iOS Settings -> Obsidian Plugin, then paste it here.").addTextArea((text) => {
       text.setPlaceholder("Paste the token copied from iOS Settings").setValue(this.plugin.settings.obsidianPluginToken).onChange(async (value) => {
         this.plugin.settings.obsidianPluginToken = value.trim();
         await this.plugin.saveSettings();
@@ -701,7 +743,7 @@ var MailsBlogSettingTab = class extends import_obsidian6.PluginSettingTab {
         text: `Token expires at: ${this.plugin.settings.obsidianPluginTokenExpiresAt}`
       });
     }
-    new import_obsidian6.Setting(containerEl).setName("Test Connection").setDesc("Verify that the current API URL and token can access your blog drafts.").addButton((button) => {
+    new import_obsidian5.Setting(containerEl).setName("Test Connection").setDesc("Verify that the current API URL and token can access your blog drafts.").addButton((button) => {
       button.setButtonText("Test");
       button.onClick(async () => {
         button.setDisabled(true);
@@ -715,15 +757,15 @@ var MailsBlogSettingTab = class extends import_obsidian6.PluginSettingTab {
           await this.plugin.saveSettings();
           const baseMessage = `Connected successfully. ${result.posts.items.length} post(s) visible.`;
           if (result.tokenRefreshed) {
-            new import_obsidian6.Notice(`${baseMessage} Token rotated and saved locally.`);
+            new import_obsidian5.Notice(`${baseMessage} Token rotated and saved locally.`);
           } else if (result.refreshWarning) {
-            new import_obsidian6.Notice(`${baseMessage} Warning: current token works, but refresh failed: ${result.refreshWarning}`);
+            new import_obsidian5.Notice(`${baseMessage} Warning: current token works, but refresh failed: ${result.refreshWarning}`);
           } else {
-            new import_obsidian6.Notice(baseMessage);
+            new import_obsidian5.Notice(baseMessage);
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Connection test failed.";
-          new import_obsidian6.Notice(message);
+          new import_obsidian5.Notice(message);
         } finally {
           button.setDisabled(false);
         }
@@ -733,7 +775,7 @@ var MailsBlogSettingTab = class extends import_obsidian6.PluginSettingTab {
 };
 
 // main.ts
-var MailsBlogPublisherPlugin = class extends import_obsidian7.Plugin {
+var MailsBlogPublisherPlugin = class extends import_obsidian6.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
