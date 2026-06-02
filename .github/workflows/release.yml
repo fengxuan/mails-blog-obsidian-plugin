@@ -1,0 +1,85 @@
+name: Release Obsidian Plugin
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release metadata
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+
+          const tag = process.env.RELEASE_TAG;
+          const semverLike = /^\d+\.\d+\.\d+$/;
+          if (!semverLike.test(tag)) {
+            throw new Error(`Release tag must look like x.y.z, got: ${tag}`);
+          }
+
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const versions = JSON.parse(fs.readFileSync("versions.json", "utf8"));
+
+          if (manifest.version !== tag) {
+            throw new Error(`manifest.json version ${manifest.version} does not match tag ${tag}`);
+          }
+
+          if (pkg.version !== tag) {
+            throw new Error(`package.json version ${pkg.version} does not match tag ${tag}`);
+          }
+
+          if (versions[manifest.version] !== manifest.minAppVersion) {
+            throw new Error(
+              `versions.json must map ${manifest.version} to ${manifest.minAppVersion}`,
+            );
+          }
+          NODE
+
+      - name: Build release assets
+        run: npm run release:package
+
+      - name: Create release zip
+        run: |
+          cd release
+          zip -r "mails-blog-publisher-${RELEASE_TAG}.zip" mails-blog-publisher
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: |
+            release/mails-blog-publisher/manifest.json
+            release/mails-blog-publisher/main.js
+            release/mails-blog-publisher/styles.css
+            release/mails-blog-publisher-${{ env.RELEASE_TAG }}.zip
