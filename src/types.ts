@@ -11,7 +11,7 @@ export interface ObsidianPluginTokenRefreshResponse {
 }
 
 export interface PostListResponse {
-  items: BlogPost[];
+  items: BlogPostSummary[];
   next_cursor: string | null;
 }
 
@@ -25,7 +25,7 @@ export interface BlogPostResponse {
   post: BlogPost;
 }
 
-export interface BlogPost {
+export interface BlogPostSummary {
   id: string;
   author_slug: string;
   title: string;
@@ -37,10 +37,14 @@ export interface BlogPost {
   published_at: string | null;
   created_at: string;
   updated_at: string;
-  content_markdown: string | null;
-  content_html: string;
+  excerpt: string;
   has_unpublished_changes: boolean;
   is_pinned: boolean;
+}
+
+export interface BlogPost extends BlogPostSummary {
+  content_markdown: string | null;
+  content_html: string;
 }
 
 export interface PostPayload {
