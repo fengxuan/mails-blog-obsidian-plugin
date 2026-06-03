@@ -25,6 +25,14 @@ export interface BlogPostResponse {
   post: BlogPost;
 }
 
+export interface BlogPostVersionsResponse {
+  versions: BlogPostVersion[];
+}
+
+export interface BlogPostVersionResponse {
+  version: BlogPostVersion;
+}
+
 export interface BlogPostSummary {
   id: string;
   author_slug: string;
@@ -45,6 +53,27 @@ export interface BlogPostSummary {
 export interface BlogPost extends BlogPostSummary {
   content_markdown: string | null;
   content_html: string;
+}
+
+export interface BlogPostVersion {
+  id: string;
+  post_id: string;
+  version_number: number;
+  status: "draft" | "published" | "archived";
+  title: string;
+  slug: string;
+  category: string | null;
+  tags: string[];
+  card_image: string | null;
+  excerpt: string;
+  content_markdown: string | null;
+  content_html: string;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+  derived_from_version_id: string | null;
+  is_current_draft: boolean;
+  is_current_published: boolean;
 }
 
 export interface PostPayload {

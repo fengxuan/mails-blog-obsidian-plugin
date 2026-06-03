@@ -8,6 +8,7 @@ This plugin is for people who already use Mails Blog and want to draft, publish,
 - Save the current note as a draft
 - Publish the current note
 - Sync a linked note back from Mails Blog
+- View saved version history for a linked note
 - Upload an image from the vault and insert the returned Markdown
 - Write blog binding metadata back into frontmatter automatically
 
@@ -70,6 +71,7 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
 3. Publish when you are ready to make it live.
 4. Use `Sync Current Note From Blog` if the remote post changed elsewhere.
 5. Use `Upload Image` to choose a local image file and insert uploaded image Markdown into the current note.
+6. Use `Show Current Note Version History` to inspect saved draft and published snapshots for the linked post.
 
 ## Other Commands
 
@@ -79,6 +81,8 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
   - removes only the local link to the remote post
 - `Mails Blog: Upload Image`
   - choose a local `jpg`, `jpeg`, `png`, `webp`, or `gif` image file to upload
+- `Mails Blog: Show Current Note Version History`
+  - opens a read-only history view for the linked post's saved versions
 
 ## Notes
 

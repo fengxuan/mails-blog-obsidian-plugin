@@ -2,6 +2,7 @@ import { MarkdownView, Notice, type App } from "obsidian";
 import {
   publishCurrentNote,
   saveCurrentNoteAsDraft,
+  showCurrentNoteVersionHistory,
   syncCurrentNoteFromBlog,
   unlinkCurrentNote,
   uploadImageFile,
@@ -92,6 +93,21 @@ export function registerCommands(
         });
       } catch (error) {
         new Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
+      }
+    },
+  });
+
+  plugin.addCommand({
+    id: "show-current-note-version-history",
+    name: "Show Current Note Version History",
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await showCurrentNoteVersionHistory(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : "Failed to load version history.");
       }
     },
   });

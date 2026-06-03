@@ -2,6 +2,9 @@ import { requestUrl } from "obsidian";
 import type {
   BlogImageUploadResponse,
   BlogPost,
+  BlogPostVersion,
+  BlogPostVersionResponse,
+  BlogPostVersionsResponse,
   BlogPostResponse,
   MailsBlogPluginSettings,
   ObsidianPluginTokenRefreshResponse,
@@ -73,6 +76,22 @@ export class MailsBlogApiClient {
   async getPost(postId: string): Promise<BlogPost> {
     const response = await this.request<BlogPostResponse>(`/api/posts/${encodeURIComponent(postId)}`, "GET");
     return response.post;
+  }
+
+  async listPostVersions(postId: string): Promise<BlogPostVersion[]> {
+    const response = await this.request<BlogPostVersionsResponse>(
+      `/api/posts/${encodeURIComponent(postId)}/versions`,
+      "GET",
+    );
+    return response.versions;
+  }
+
+  async getPostVersion(postId: string, versionId: string): Promise<BlogPostVersion> {
+    const response = await this.request<BlogPostVersionResponse>(
+      `/api/posts/${encodeURIComponent(postId)}/versions/${encodeURIComponent(versionId)}`,
+      "GET",
+    );
+    return response.version;
   }
 
   async uploadImage(data: ArrayBuffer, filename: string, mimeType: string): Promise<BlogImageUploadResponse> {

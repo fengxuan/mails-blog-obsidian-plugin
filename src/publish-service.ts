@@ -1,4 +1,4 @@
-import { Notice, TFile, type App } from "obsidian";
+import { ItemView, Notice, TFile, WorkspaceLeaf, type App } from "obsidian";
 import { MailsBlogApiClient } from "./api";
 import {
   clearPostBinding,
@@ -8,7 +8,120 @@ import {
   replaceNoteWithPost,
   writePostBinding,
 } from "./frontmatter";
-import type { BlogImageUploadResponse, BlogPost, MailsBlogPluginSettings, PostPayload } from "./types";
+import type { BlogImageUploadResponse, BlogPost, BlogPostVersion, MailsBlogPluginSettings, PostPayload } from "./types";
+
+export const BLOG_VERSION_HISTORY_VIEW_TYPE = "mails-blog-version-history";
+
+class BlogVersionHistoryView extends ItemView {
+  private versions: BlogPostVersion[] = [];
+  private postTitle = "";
+  private fileName = "";
+
+  constructor(leaf: WorkspaceLeaf) {
+    super(leaf);
+  }
+
+  getViewType(): string {
+    return BLOG_VERSION_HISTORY_VIEW_TYPE;
+  }
+
+  getDisplayText(): string {
+    return "Mails Blog Version History";
+  }
+
+  async setState(state: { postTitle: string; fileName: string; versions: BlogPostVersion[] }): Promise<void> {
+    this.postTitle = state.postTitle;
+    this.fileName = state.fileName;
+    this.versions = state.versions;
+    this.render();
+  }
+
+  async onOpen(): Promise<void> {
+    this.render();
+  }
+
+  async onClose(): Promise<void> {
+    this.contentEl.empty();
+  }
+
+  private render(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("mails-blog-version-history-view");
+
+    contentEl.createEl("h2", { text: this.postTitle || "Version History" });
+    if (this.fileName) {
+      contentEl.createEl("p", {
+        cls: "mails-blog-version-history-subtitle",
+        text: `Current note: ${this.fileName}`,
+      });
+    }
+
+    if (this.versions.length === 0) {
+      contentEl.createEl("p", {
+        cls: "mails-blog-version-history-empty",
+        text: "No saved versions yet.",
+      });
+      return;
+    }
+
+    const listEl = contentEl.createDiv({ cls: "mails-blog-version-history-list" });
+    this.versions.forEach((version) => {
+      const cardEl = listEl.createDiv({ cls: "mails-blog-version-history-card" });
+      const topRow = cardEl.createDiv({ cls: "mails-blog-version-history-top" });
+      topRow.createEl("strong", { text: `Version ${version.version_number}` });
+
+      const badgesEl = topRow.createDiv({ cls: "mails-blog-version-history-badges" });
+      badgesEl.createSpan({
+        cls: `mails-blog-version-history-badge is-${version.status}`,
+        text: version.status,
+      });
+      if (version.is_current_draft) {
+        badgesEl.createSpan({
+          cls: "mails-blog-version-history-badge is-current-draft",
+          text: "current draft",
+        });
+      }
+      if (version.is_current_published) {
+        badgesEl.createSpan({
+          cls: "mails-blog-version-history-badge is-current-published",
+          text: "current published",
+        });
+      }
+
+      cardEl.createEl("div", {
+        cls: "mails-blog-version-history-title",
+        text: version.title,
+      });
+
+      const metaParts = [
+        `Updated ${formatTimestamp(version.updated_at)}`,
+        version.published_at ? `Published ${formatTimestamp(version.published_at)}` : "",
+        version.category ? `Category ${version.category}` : "",
+      ].filter(Boolean);
+
+      if (metaParts.length > 0) {
+        cardEl.createEl("div", {
+          cls: "mails-blog-version-history-meta",
+          text: metaParts.join(" · "),
+        });
+      }
+
+      if (version.tags.length > 0) {
+        cardEl.createEl("div", {
+          cls: "mails-blog-version-history-tags",
+          text: version.tags.map((tag) => `#${tag}`).join(" "),
+        });
+      }
+
+      const body = (version.content_markdown ?? "").trim() || version.excerpt.trim();
+      cardEl.createEl("pre", {
+        cls: "mails-blog-version-history-preview",
+        text: previewBody(body),
+      });
+    });
+  }
+}
 
 function buildPayload(metadata: Awaited<ReturnType<typeof parseNoteMetadata>>): PostPayload {
   const payload: PostPayload = {
@@ -169,4 +282,66 @@ export async function uploadImageFile(
     progressNotice.hide();
     throw error;
   }
+}
+
+export async function showCurrentNoteVersionHistory(
+  app: App,
+  file: TFile,
+  settings: MailsBlogPluginSettings,
+  onSettingsChanged: () => Promise<void> = async () => {},
+): Promise<void> {
+  const progressNotice = new Notice("Loading version history from Mails Blog...", 0);
+  try {
+    const metadata = await parseNoteMetadata(app, file);
+    if (!metadata.postId) {
+      throw new Error("Current note is not linked to a Mails Blog post yet.");
+    }
+
+    const client = createClient(settings, onSettingsChanged);
+    const versions = await client.listPostVersions(metadata.postId);
+    progressNotice.hide();
+
+    const leaf = app.workspace.getLeaf(true);
+    await leaf.setViewState({
+      type: BLOG_VERSION_HISTORY_VIEW_TYPE,
+      active: true,
+    });
+    const view = leaf.view;
+    if (view instanceof BlogVersionHistoryView) {
+      await view.setState({
+        postTitle: metadata.title,
+        fileName: file.path,
+        versions,
+      });
+    }
+    app.workspace.revealLeaf(leaf);
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
+}
+
+export function registerBlogVersionHistoryView(
+  registerView: (type: string, viewCreator: (leaf: WorkspaceLeaf) => ItemView) => void,
+): void {
+  registerView(BLOG_VERSION_HISTORY_VIEW_TYPE, (leaf) => new BlogVersionHistoryView(leaf));
+}
+
+function previewBody(body: string): string {
+  const normalized = body.trim();
+  if (!normalized) {
+    return "No body content saved for this version.";
+  }
+  return normalized.length > 800 ? `${normalized.slice(0, 800).trimEnd()}\n…` : normalized;
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
