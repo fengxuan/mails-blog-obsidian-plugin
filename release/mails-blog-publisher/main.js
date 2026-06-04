@@ -107,6 +107,28 @@ var MailsBlogApiClient = class {
     const response = await this.request(`/api/posts/${encodeURIComponent(postId)}`, "GET");
     return response.post;
   }
+  async listPostVersions(postId) {
+    const response = await this.request(
+      `/api/posts/${encodeURIComponent(postId)}/versions`,
+      "GET"
+    );
+    return response.versions;
+  }
+  async getPostVersion(postId, versionId) {
+    const response = await this.request(
+      `/api/posts/${encodeURIComponent(postId)}/versions/${encodeURIComponent(versionId)}`,
+      "GET"
+    );
+    return response.version;
+  }
+  async restorePostVersion(postId, versionId) {
+    const response = await this.request(
+      `/api/posts/${encodeURIComponent(postId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      "POST",
+      {}
+    );
+    return response.post;
+  }
   async uploadImage(data, filename, mimeType) {
     await this.ensureTokenReady();
     const blogApiBaseUrl = this.requireBaseUrl();
@@ -411,6 +433,101 @@ async function clearPostBinding(app, file) {
 }
 
 // src/publish-service.ts
+var BLOG_VERSION_HISTORY_VIEW_TYPE = "mails-blog-version-history";
+var BlogVersionHistoryView = class extends import_obsidian3.ItemView {
+  constructor(leaf) {
+    super(leaf);
+    this.versions = [];
+    this.postTitle = "";
+    this.fileName = "";
+  }
+  getViewType() {
+    return BLOG_VERSION_HISTORY_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "Mails Blog Version History";
+  }
+  async setState(state) {
+    this.postTitle = state.postTitle;
+    this.fileName = state.fileName;
+    this.versions = state.versions;
+    this.render();
+  }
+  async onOpen() {
+    this.render();
+  }
+  async onClose() {
+    this.contentEl.empty();
+  }
+  render() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("mails-blog-version-history-view");
+    contentEl.createEl("h2", { text: this.postTitle || "Version History" });
+    if (this.fileName) {
+      contentEl.createEl("p", {
+        cls: "mails-blog-version-history-subtitle",
+        text: `Current note: ${this.fileName}`
+      });
+    }
+    if (this.versions.length === 0) {
+      contentEl.createEl("p", {
+        cls: "mails-blog-version-history-empty",
+        text: "No saved versions yet."
+      });
+      return;
+    }
+    const listEl = contentEl.createDiv({ cls: "mails-blog-version-history-list" });
+    this.versions.forEach((version) => {
+      const cardEl = listEl.createDiv({ cls: "mails-blog-version-history-card" });
+      const topRow = cardEl.createDiv({ cls: "mails-blog-version-history-top" });
+      topRow.createEl("strong", { text: `Version ${version.version_number}` });
+      const badgesEl = topRow.createDiv({ cls: "mails-blog-version-history-badges" });
+      badgesEl.createSpan({
+        cls: `mails-blog-version-history-badge is-${version.status}`,
+        text: version.status
+      });
+      if (version.is_current_draft) {
+        badgesEl.createSpan({
+          cls: "mails-blog-version-history-badge is-current-draft",
+          text: "current draft"
+        });
+      }
+      if (version.is_current_published) {
+        badgesEl.createSpan({
+          cls: "mails-blog-version-history-badge is-current-published",
+          text: "current published"
+        });
+      }
+      cardEl.createEl("div", {
+        cls: "mails-blog-version-history-title",
+        text: version.title
+      });
+      const metaParts = [
+        `Updated ${formatTimestamp(version.updated_at)}`,
+        version.published_at ? `Published ${formatTimestamp(version.published_at)}` : "",
+        version.category ? `Category ${version.category}` : ""
+      ].filter(Boolean);
+      if (metaParts.length > 0) {
+        cardEl.createEl("div", {
+          cls: "mails-blog-version-history-meta",
+          text: metaParts.join(" \xB7 ")
+        });
+      }
+      if (version.tags.length > 0) {
+        cardEl.createEl("div", {
+          cls: "mails-blog-version-history-tags",
+          text: version.tags.map((tag) => `#${tag}`).join(" ")
+        });
+      }
+      const body = (version.content_markdown ?? "").trim() || version.excerpt.trim();
+      cardEl.createEl("pre", {
+        cls: "mails-blog-version-history-preview",
+        text: previewBody(body)
+      });
+    });
+  }
+};
 function buildPayload(metadata) {
   const payload = {
     title: metadata.title,
@@ -433,6 +550,105 @@ function createClient(settings, onSettingsChanged) {
       await onSettingsChanged();
     }
   });
+}
+var BlogVersionSuggestModal = class extends import_obsidian3.SuggestModal {
+  constructor(app, versions, resolveSelection) {
+    super(app);
+    this.versions = versions;
+    this.didResolve = false;
+    this.resolveSelection = resolveSelection;
+    this.setPlaceholder("Select a blog version to restore");
+    this.emptyStateText = "No matching versions found.";
+    this.setInstructions([
+      { command: "Enter", purpose: "Restore selected version" },
+      { command: "Esc", purpose: "Cancel" }
+    ]);
+  }
+  getSuggestions(query) {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return this.versions;
+    }
+    return this.versions.filter((version) => {
+      const haystack = [
+        version.version_number.toString(),
+        version.title,
+        version.status,
+        version.category ?? "",
+        version.tags.join(" ")
+      ].join(" ").toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }
+  renderSuggestion(version, el) {
+    el.createDiv({ text: `${versionLabel(version)} \xB7 ${version.title}` });
+    const details = [
+      version.status,
+      `Updated ${formatTimestamp(version.updated_at)}`,
+      version.is_current_draft ? "current draft" : "",
+      version.is_current_published ? "current published" : ""
+    ].filter(Boolean);
+    el.createEl("small", { text: details.join(" \xB7 ") });
+  }
+  onChooseSuggestion(version) {
+    this.didResolve = true;
+    this.resolveSelection(version);
+  }
+  onClose() {
+    super.onClose();
+    if (!this.didResolve) {
+      this.resolveSelection(null);
+    }
+  }
+};
+var RestoreVersionConfirmationModal = class extends import_obsidian3.ConfirmationModal {
+  constructor(app, file, version, resolveConfirmation) {
+    super(app);
+    this.file = file;
+    this.version = version;
+    this.didResolve = false;
+    this.resolveConfirmation = resolveConfirmation;
+  }
+  onOpen() {
+    super.onOpen();
+    this.setTitle("Restore blog version?");
+    this.contentEl.createEl("p", {
+      text: `Version ${this.version.version_number} will become the current remote draft.`
+    });
+    this.contentEl.createEl("p", {
+      text: `This also replaces the local note content in ${this.file.path}.`
+    });
+    this.addButton((button) => {
+      button.setButtonText("Restore");
+      button.setWarning();
+      button.onClick(() => {
+        this.didResolve = true;
+        this.resolveConfirmation(true);
+      });
+    });
+    this.addCancelButton("Cancel");
+  }
+  onClose() {
+    super.onClose();
+    if (!this.didResolve) {
+      this.resolveConfirmation(false);
+    }
+  }
+};
+function chooseVersionToRestore(app, versions) {
+  return new Promise((resolve) => {
+    const modal = new BlogVersionSuggestModal(app, versions, resolve);
+    modal.open();
+  });
+}
+function confirmVersionRestore(app, file, version) {
+  return new Promise((resolve) => {
+    const modal = new RestoreVersionConfirmationModal(app, file, version, resolve);
+    modal.open();
+  });
+}
+function versionLabel(version) {
+  return `Version ${version.version_number}`;
 }
 async function saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged = async () => {
 }) {
@@ -536,6 +752,99 @@ async function uploadImageFile(file, settings, onSettingsChanged = async () => {
     throw error;
   }
 }
+async function showCurrentNoteVersionHistory(app, file, settings, onSettingsChanged = async () => {
+}) {
+  const progressNotice = new import_obsidian3.Notice("Loading version history from Mails Blog...", 0);
+  try {
+    const metadata = await parseNoteMetadata(app, file);
+    if (!metadata.postId) {
+      throw new Error("Current note is not linked to a Mails Blog post yet.");
+    }
+    const client = createClient(settings, onSettingsChanged);
+    const versions = await client.listPostVersions(metadata.postId);
+    progressNotice.hide();
+    const leaf = app.workspace.getLeaf(true);
+    await leaf.setViewState({
+      type: BLOG_VERSION_HISTORY_VIEW_TYPE,
+      active: true
+    });
+    const view = leaf.view;
+    if (view instanceof BlogVersionHistoryView) {
+      await view.setState({
+        postTitle: metadata.title,
+        fileName: file.path,
+        versions
+      });
+    }
+    app.workspace.revealLeaf(leaf);
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
+}
+async function restoreCurrentNoteFromVersionHistory(app, file, settings, onSettingsChanged = async () => {
+}) {
+  const progressNotice = new import_obsidian3.Notice("Loading version history from Mails Blog...", 0);
+  try {
+    const metadata = await parseNoteMetadata(app, file);
+    if (!metadata.postId) {
+      throw new Error("Current note is not linked to a Mails Blog post yet.");
+    }
+    const client = createClient(settings, onSettingsChanged);
+    const versions = await client.listPostVersions(metadata.postId);
+    progressNotice.hide();
+    if (versions.length === 0) {
+      throw new Error("No saved versions available to restore.");
+    }
+    const selectedVersion = await chooseVersionToRestore(app, versions);
+    if (!selectedVersion) {
+      return null;
+    }
+    if (selectedVersion.is_current_draft) {
+      new import_obsidian3.Notice(`${versionLabel(selectedVersion)} is already the current draft.`);
+      return null;
+    }
+    const confirmed = await confirmVersionRestore(app, file, selectedVersion);
+    if (!confirmed) {
+      return null;
+    }
+    const restoreNotice = new import_obsidian3.Notice("Restoring selected version...", 0);
+    try {
+      const post = await client.restorePostVersion(metadata.postId, selectedVersion.id);
+      await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
+      restoreNotice.hide();
+      new import_obsidian3.Notice(`Restored ${versionLabel(selectedVersion)} into current draft.`);
+      return post;
+    } catch (error) {
+      restoreNotice.hide();
+      throw error;
+    }
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
+}
+function registerBlogVersionHistoryView(registerView) {
+  registerView(BLOG_VERSION_HISTORY_VIEW_TYPE, (leaf) => new BlogVersionHistoryView(leaf));
+}
+function previewBody(body) {
+  const normalized = body.trim();
+  if (!normalized) {
+    return "No body content saved for this version.";
+  }
+  return normalized.length > 800 ? `${normalized.slice(0, 800).trimEnd()}
+\u2026` : normalized;
+}
+function formatTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(void 0, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(date);
+}
 
 // src/commands.ts
 function getCurrentMarkdownFile(app) {
@@ -605,6 +914,34 @@ function registerCommands(app, plugin) {
         });
       } catch (error) {
         new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
+      }
+    }
+  });
+  plugin.addCommand({
+    id: "show-current-note-version-history",
+    name: "Show Current Note Version History",
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await showCurrentNoteVersionHistory(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to load version history.");
+      }
+    }
+  });
+  plugin.addCommand({
+    id: "restore-current-note-from-blog-version",
+    name: "Restore Current Note From Blog Version",
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await restoreCurrentNoteFromVersionHistory(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to restore note from version history.");
       }
     }
   });
@@ -782,6 +1119,7 @@ var MailsBlogPublisherPlugin = class extends import_obsidian6.Plugin {
   }
   async onload() {
     await this.loadSettings();
+    registerBlogVersionHistoryView((type, viewCreator) => this.registerView(type, viewCreator));
     this.addSettingTab(new MailsBlogSettingTab(this.app, this));
     registerCommands(this.app, this);
   }

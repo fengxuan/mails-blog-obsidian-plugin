@@ -10,3 +10,85 @@
   font-size: var(--font-ui-smaller);
   word-break: break-all;
 }
+
+.mails-blog-version-history-view {
+  padding: 16px;
+}
+
+.mails-blog-version-history-subtitle,
+.mails-blog-version-history-empty,
+.mails-blog-version-history-meta,
+.mails-blog-version-history-tags {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.mails-blog-version-history-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.mails-blog-version-history-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--background-secondary);
+}
+
+.mails-blog-version-history-top {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.mails-blog-version-history-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.mails-blog-version-history-badge {
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  padding: 2px 8px;
+  text-transform: capitalize;
+}
+
+.mails-blog-version-history-badge.is-draft,
+.mails-blog-version-history-badge.is-archived {
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.mails-blog-version-history-badge.is-published,
+.mails-blog-version-history-badge.is-current-published {
+  background: color-mix(in srgb, var(--color-green) 18%, transparent);
+}
+
+.mails-blog-version-history-badge.is-current-draft {
+  background: color-mix(in srgb, var(--color-cyan) 18%, transparent);
+}
+
+.mails-blog-version-history-title {
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.mails-blog-version-history-meta,
+.mails-blog-version-history-tags {
+  margin-top: 8px;
+}
+
+.mails-blog-version-history-preview {
+  background: var(--background-primary);
+  border-radius: 10px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  margin: 12px 0 0;
+  overflow-x: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
