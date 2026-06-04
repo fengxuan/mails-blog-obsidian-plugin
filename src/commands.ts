@@ -1,6 +1,7 @@
 import { MarkdownView, Notice, type App } from "obsidian";
 import {
   publishCurrentNote,
+  restoreCurrentNoteFromVersionHistory,
   saveCurrentNoteAsDraft,
   showCurrentNoteVersionHistory,
   syncCurrentNoteFromBlog,
@@ -108,6 +109,21 @@ export function registerCommands(
         });
       } catch (error) {
         new Notice(error instanceof Error ? error.message : "Failed to load version history.");
+      }
+    },
+  });
+
+  plugin.addCommand({
+    id: "restore-current-note-from-blog-version",
+    name: "Restore Current Note From Blog Version",
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await restoreCurrentNoteFromVersionHistory(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : "Failed to restore note from version history.");
       }
     },
   });

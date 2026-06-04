@@ -1,4 +1,12 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf, type App } from "obsidian";
+import {
+  ConfirmationModal,
+  ItemView,
+  Notice,
+  SuggestModal,
+  TFile,
+  WorkspaceLeaf,
+  type App,
+} from "obsidian";
 import { MailsBlogApiClient } from "./api";
 import {
   clearPostBinding,
@@ -146,6 +154,127 @@ function createClient(settings: MailsBlogPluginSettings, onSettingsChanged: () =
       await onSettingsChanged();
     },
   });
+}
+
+class BlogVersionSuggestModal extends SuggestModal<BlogPostVersion> {
+  private readonly resolveSelection: (version: BlogPostVersion | null) => void;
+  private didResolve = false;
+
+  constructor(
+    app: App,
+    private readonly versions: BlogPostVersion[],
+    resolveSelection: (version: BlogPostVersion | null) => void,
+  ) {
+    super(app);
+    this.resolveSelection = resolveSelection;
+    this.setPlaceholder("Select a blog version to restore");
+    this.emptyStateText = "No matching versions found.";
+    this.setInstructions([
+      { command: "Enter", purpose: "Restore selected version" },
+      { command: "Esc", purpose: "Cancel" },
+    ]);
+  }
+
+  getSuggestions(query: string): BlogPostVersion[] {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return this.versions;
+    }
+
+    return this.versions.filter((version) => {
+      const haystack = [
+        version.version_number.toString(),
+        version.title,
+        version.status,
+        version.category ?? "",
+        version.tags.join(" "),
+      ].join(" ").toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }
+
+  renderSuggestion(version: BlogPostVersion, el: HTMLElement): void {
+    el.createDiv({ text: `${versionLabel(version)} · ${version.title}` });
+    const details = [
+      version.status,
+      `Updated ${formatTimestamp(version.updated_at)}`,
+      version.is_current_draft ? "current draft" : "",
+      version.is_current_published ? "current published" : "",
+    ].filter(Boolean);
+    el.createEl("small", { text: details.join(" · ") });
+  }
+
+  onChooseSuggestion(version: BlogPostVersion): void {
+    this.didResolve = true;
+    this.resolveSelection(version);
+  }
+
+  onClose(): void {
+    super.onClose();
+    if (!this.didResolve) {
+      this.resolveSelection(null);
+    }
+  }
+}
+
+class RestoreVersionConfirmationModal extends ConfirmationModal {
+  private readonly resolveConfirmation: (confirmed: boolean) => void;
+  private didResolve = false;
+
+  constructor(
+    app: App,
+    private readonly file: TFile,
+    private readonly version: BlogPostVersion,
+    resolveConfirmation: (confirmed: boolean) => void,
+  ) {
+    super(app);
+    this.resolveConfirmation = resolveConfirmation;
+  }
+
+  onOpen(): void {
+    super.onOpen();
+    this.setTitle("Restore blog version?");
+    this.contentEl.createEl("p", {
+      text: `Version ${this.version.version_number} will become the current remote draft.`,
+    });
+    this.contentEl.createEl("p", {
+      text: `This also replaces the local note content in ${this.file.path}.`,
+    });
+    this.addButton((button) => {
+      button.setButtonText("Restore");
+      button.setWarning();
+      button.onClick(() => {
+        this.didResolve = true;
+        this.resolveConfirmation(true);
+      });
+    });
+    this.addCancelButton("Cancel");
+  }
+
+  onClose(): void {
+    super.onClose();
+    if (!this.didResolve) {
+      this.resolveConfirmation(false);
+    }
+  }
+}
+
+function chooseVersionToRestore(app: App, versions: BlogPostVersion[]): Promise<BlogPostVersion | null> {
+  return new Promise((resolve) => {
+    const modal = new BlogVersionSuggestModal(app, versions, resolve);
+    modal.open();
+  });
+}
+
+function confirmVersionRestore(app: App, file: TFile, version: BlogPostVersion): Promise<boolean> {
+  return new Promise((resolve) => {
+    const modal = new RestoreVersionConfirmationModal(app, file, version, resolve);
+    modal.open();
+  });
+}
+
+function versionLabel(version: BlogPostVersion): string {
+  return `Version ${version.version_number}`;
 }
 
 export async function saveCurrentNoteAsDraft(
@@ -315,6 +444,59 @@ export async function showCurrentNoteVersionHistory(
       });
     }
     app.workspace.revealLeaf(leaf);
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
+}
+
+export async function restoreCurrentNoteFromVersionHistory(
+  app: App,
+  file: TFile,
+  settings: MailsBlogPluginSettings,
+  onSettingsChanged: () => Promise<void> = async () => {},
+): Promise<BlogPost | null> {
+  const progressNotice = new Notice("Loading version history from Mails Blog...", 0);
+  try {
+    const metadata = await parseNoteMetadata(app, file);
+    if (!metadata.postId) {
+      throw new Error("Current note is not linked to a Mails Blog post yet.");
+    }
+
+    const client = createClient(settings, onSettingsChanged);
+    const versions = await client.listPostVersions(metadata.postId);
+    progressNotice.hide();
+
+    if (versions.length === 0) {
+      throw new Error("No saved versions available to restore.");
+    }
+
+    const selectedVersion = await chooseVersionToRestore(app, versions);
+    if (!selectedVersion) {
+      return null;
+    }
+
+    if (selectedVersion.is_current_draft) {
+      new Notice(`${versionLabel(selectedVersion)} is already the current draft.`);
+      return null;
+    }
+
+    const confirmed = await confirmVersionRestore(app, file, selectedVersion);
+    if (!confirmed) {
+      return null;
+    }
+
+    const restoreNotice = new Notice("Restoring selected version...", 0);
+    try {
+      const post = await client.restorePostVersion(metadata.postId, selectedVersion.id);
+      await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
+      restoreNotice.hide();
+      new Notice(`Restored ${versionLabel(selectedVersion)} into current draft.`);
+      return post;
+    } catch (error) {
+      restoreNotice.hide();
+      throw error;
+    }
   } catch (error) {
     progressNotice.hide();
     throw error;

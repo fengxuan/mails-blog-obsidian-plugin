@@ -94,6 +94,15 @@ export class MailsBlogApiClient {
     return response.version;
   }
 
+  async restorePostVersion(postId: string, versionId: string): Promise<BlogPost> {
+    const response = await this.request<BlogPostResponse>(
+      `/api/posts/${encodeURIComponent(postId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      "POST",
+      {},
+    );
+    return response.post;
+  }
+
   async uploadImage(data: ArrayBuffer, filename: string, mimeType: string): Promise<BlogImageUploadResponse> {
     await this.ensureTokenReady();
     const blogApiBaseUrl = this.requireBaseUrl();
