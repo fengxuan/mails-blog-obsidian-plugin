@@ -69,20 +69,13 @@ jobs:
       - name: Build release assets
         run: npm run release:package
 
-      - name: Attest manifest.json
-        uses: actions/attest-build-provenance@v2
+      - name: Attest release assets
+        uses: actions/attest@v4
         with:
-          subject-path: release/mails-blog-publisher/manifest.json
-
-      - name: Attest main.js
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: release/mails-blog-publisher/main.js
-
-      - name: Attest styles.css
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: release/mails-blog-publisher/styles.css
+          subject-path: |
+            release/mails-blog-publisher/manifest.json
+            release/mails-blog-publisher/main.js
+            release/mails-blog-publisher/styles.css
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
