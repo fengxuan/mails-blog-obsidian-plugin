@@ -601,7 +601,7 @@ var BlogVersionSuggestModal = class extends import_obsidian3.SuggestModal {
     }
   }
 };
-var RestoreVersionConfirmationModal = class extends import_obsidian3.ConfirmationModal {
+var RestoreVersionConfirmationModal = class extends import_obsidian3.Modal {
   constructor(app, file, version, resolveConfirmation) {
     super(app);
     this.file = file;
@@ -610,7 +610,6 @@ var RestoreVersionConfirmationModal = class extends import_obsidian3.Confirmatio
     this.resolveConfirmation = resolveConfirmation;
   }
   onOpen() {
-    super.onOpen();
     this.setTitle("Restore blog version?");
     this.contentEl.createEl("p", {
       text: `Version ${this.version.version_number} will become the current remote draft.`
@@ -618,18 +617,27 @@ var RestoreVersionConfirmationModal = class extends import_obsidian3.Confirmatio
     this.contentEl.createEl("p", {
       text: `This also replaces the local note content in ${this.file.path}.`
     });
-    this.addButton((button) => {
-      button.setButtonText("Restore");
-      button.setWarning();
-      button.onClick(() => {
-        this.didResolve = true;
-        this.resolveConfirmation(true);
-      });
+    const actionsEl = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const restoreButton = actionsEl.createEl("button", {
+      cls: "mod-warning",
+      text: "Restore"
     });
-    this.addCancelButton("Cancel");
+    restoreButton.addEventListener("click", () => {
+      this.didResolve = true;
+      this.resolveConfirmation(true);
+      this.close();
+    });
+    const cancelButton = actionsEl.createEl("button", {
+      text: "Cancel"
+    });
+    cancelButton.addEventListener("click", () => {
+      this.didResolve = true;
+      this.resolveConfirmation(false);
+      this.close();
+    });
   }
   onClose() {
-    super.onClose();
+    this.contentEl.empty();
     if (!this.didResolve) {
       this.resolveConfirmation(false);
     }

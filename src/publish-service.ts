@@ -1,6 +1,6 @@
 import {
-  ConfirmationModal,
   ItemView,
+  Modal,
   Notice,
   SuggestModal,
   TFile,
@@ -217,7 +217,7 @@ class BlogVersionSuggestModal extends SuggestModal<BlogPostVersion> {
   }
 }
 
-class RestoreVersionConfirmationModal extends ConfirmationModal {
+class RestoreVersionConfirmationModal extends Modal {
   private readonly resolveConfirmation: (confirmed: boolean) => void;
   private didResolve = false;
 
@@ -232,7 +232,6 @@ class RestoreVersionConfirmationModal extends ConfirmationModal {
   }
 
   onOpen(): void {
-    super.onOpen();
     this.setTitle("Restore blog version?");
     this.contentEl.createEl("p", {
       text: `Version ${this.version.version_number} will become the current remote draft.`,
@@ -240,19 +239,30 @@ class RestoreVersionConfirmationModal extends ConfirmationModal {
     this.contentEl.createEl("p", {
       text: `This also replaces the local note content in ${this.file.path}.`,
     });
-    this.addButton((button) => {
-      button.setButtonText("Restore");
-      button.setWarning();
-      button.onClick(() => {
-        this.didResolve = true;
-        this.resolveConfirmation(true);
-      });
+
+    const actionsEl = this.contentEl.createDiv({ cls: "modal-button-container" });
+    const restoreButton = actionsEl.createEl("button", {
+      cls: "mod-warning",
+      text: "Restore",
     });
-    this.addCancelButton("Cancel");
+    restoreButton.addEventListener("click", () => {
+      this.didResolve = true;
+      this.resolveConfirmation(true);
+      this.close();
+    });
+
+    const cancelButton = actionsEl.createEl("button", {
+      text: "Cancel",
+    });
+    cancelButton.addEventListener("click", () => {
+      this.didResolve = true;
+      this.resolveConfirmation(false);
+      this.close();
+    });
   }
 
   onClose(): void {
-    super.onClose();
+    this.contentEl.empty();
     if (!this.didResolve) {
       this.resolveConfirmation(false);
     }
