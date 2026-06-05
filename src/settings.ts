@@ -5,6 +5,8 @@ import {
   Setting,
 } from "obsidian";
 import { MailsBlogApiClient } from "./api";
+import { getErrorMessage } from "./errors";
+import { getMessages } from "./i18n";
 import type MailsBlogPublisherPlugin from "../main";
 
 export class MailsBlogSettingTab extends PluginSettingTab {
@@ -15,13 +17,14 @@ export class MailsBlogSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    const messages = getMessages();
 
     new Setting(containerEl)
-      .setName("Blog API Base URL")
-      .setDesc("The Mails Blog API base URL.")
+      .setName(messages.blogApiBaseUrlName)
+      .setDesc(messages.blogApiBaseUrlDesc)
       .addText((text) => {
         text
-          .setPlaceholder("https://mails-blog.canyin.uk")
+          .setPlaceholder(messages.blogApiBaseUrlPlaceholder)
           .setValue(this.plugin.settings.blogApiBaseUrl)
           .onChange(async (value) => {
             this.plugin.settings.blogApiBaseUrl = value.trim();
@@ -30,11 +33,11 @@ export class MailsBlogSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Obsidian Plugin Token")
-      .setDesc("Generate this token in iOS Settings -> Obsidian Plugin, then paste it here.")
+      .setName(messages.obsidianPluginTokenName)
+      .setDesc(messages.obsidianPluginTokenDesc)
       .addTextArea((text) => {
         text
-          .setPlaceholder("Paste the token copied from iOS Settings")
+          .setPlaceholder(messages.obsidianPluginTokenPlaceholder)
           .setValue(this.plugin.settings.obsidianPluginToken)
           .onChange(async (value) => {
             this.plugin.settings.obsidianPluginToken = value.trim();
@@ -45,20 +48,20 @@ export class MailsBlogSettingTab extends PluginSettingTab {
 
     const preview = containerEl.createDiv({ cls: "mails-blog-plugin-setting-help" });
     const token = this.plugin.settings.obsidianPluginToken.trim();
-    preview.setText(token ? `Token preview: ${token.slice(0, 8)}...${token.slice(-6)}` : "Token not configured yet.");
+    preview.setText(token ? messages.tokenPreview(token) : messages.tokenNotConfigured);
 
     if (this.plugin.settings.obsidianPluginTokenExpiresAt.trim()) {
       containerEl.createEl("p", {
         cls: "mails-blog-plugin-setting-help",
-        text: `Token expires at: ${this.plugin.settings.obsidianPluginTokenExpiresAt}`,
+        text: messages.tokenExpiresAt(this.plugin.settings.obsidianPluginTokenExpiresAt),
       });
     }
 
     new Setting(containerEl)
-      .setName("Test Connection")
-      .setDesc("Verify that the current API URL and token can access your blog drafts.")
+      .setName(messages.testConnectionName)
+      .setDesc(messages.testConnectionDesc)
       .addButton((button) => {
-        button.setButtonText("Test");
+        button.setButtonText(messages.testConnectionButton);
         button.onClick(async () => {
           button.setDisabled(true);
           try {
@@ -69,16 +72,15 @@ export class MailsBlogSettingTab extends PluginSettingTab {
             });
             const result = await client.testConnection();
             await this.plugin.saveSettings();
-            const baseMessage = `Connected successfully. ${result.posts.items.length} post(s) visible.`;
             if (result.tokenRefreshed) {
-              new Notice(`${baseMessage} Token rotated and saved locally.`);
+              new Notice(messages.connectionSuccessTokenRotated(result.posts.items.length));
             } else if (result.refreshWarning) {
-              new Notice(`${baseMessage} Warning: current token works, but refresh failed: ${result.refreshWarning}`);
+              new Notice(messages.connectionSuccessRefreshWarning(result.posts.items.length, result.refreshWarning));
             } else {
-              new Notice(baseMessage);
+              new Notice(messages.connectionSuccess(result.posts.items.length));
             }
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Connection test failed.";
+            const message = getErrorMessage(error, messages.connectionTestFailed);
             new Notice(message);
           } finally {
             button.setDisabled(false);

@@ -1,5 +1,6 @@
 import { stringifyYaml, TFile, type App } from "obsidian";
 import { FRONTMATTER_KEYS } from "./constants";
+import { getMessages } from "./i18n";
 import type { BlogPost, ParsedNoteMetadata } from "./types";
 
 type FrontmatterShape = Record<string, unknown>;
@@ -13,8 +14,9 @@ function readFrontmatterShape(value: unknown): FrontmatterShape {
 }
 
 function requireFrontmatterShape(value: unknown): FrontmatterShape {
+  const messages = getMessages();
   if (!isRecord(value)) {
-    throw new Error("Unexpected frontmatter data shape.");
+    throw new Error(messages.unexpectedFrontmatterDataShape);
   }
 
   return value;
@@ -151,6 +153,7 @@ export async function replaceNoteWithPost(
 }
 
 export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNoteMetadata> {
+  const messages = getMessages();
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
   const frontmatter = readFrontmatterShape(cache?.frontmatter);
@@ -163,7 +166,7 @@ export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNo
 
   const body = stripFrontmatter(content);
   if (!body) {
-    throw new Error("Current note body is empty.");
+    throw new Error(messages.currentNoteBodyEmpty);
   }
 
   return {

@@ -25,7 +25,7 @@ __export(main_exports, {
   default: () => MailsBlogPublisherPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/constants.ts
 var DEFAULT_SETTINGS = {
@@ -48,13 +48,279 @@ var FRONTMATTER_KEYS = {
 };
 
 // src/commands.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/publish-service.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/api.ts
+var import_obsidian2 = require("obsidian");
+
+// src/errors.ts
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizeWhitespace(value) {
+  return value.replace(/\s+/g, " ").trim();
+}
+function collectMessages(value, seen) {
+  if (value === null || value === void 0) {
+    return [];
+  }
+  if (typeof value === "string") {
+    const normalized = normalizeWhitespace(value);
+    return normalized ? [normalized] : [];
+  }
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return [String(value)];
+  }
+  if (seen.has(value)) {
+    return [];
+  }
+  seen.add(value);
+  if (value instanceof Error) {
+    return collectMessages(value.message, seen);
+  }
+  if (Array.isArray(value)) {
+    const nested2 = value.flatMap((item) => collectMessages(item, seen));
+    return Array.from(new Set(nested2));
+  }
+  if (!isRecord(value)) {
+    const normalized = normalizeWhitespace(String(value));
+    return normalized ? [normalized] : [];
+  }
+  const priorityKeys = [
+    "message",
+    "error",
+    "detail",
+    "details",
+    "reason",
+    "description",
+    "title",
+    "msg"
+  ];
+  const messages = [];
+  for (const key of priorityKeys) {
+    if (key in value) {
+      messages.push(...collectMessages(value[key], seen));
+    }
+  }
+  if (messages.length > 0) {
+    return Array.from(new Set(messages));
+  }
+  const nested = Object.values(value).flatMap((item) => collectMessages(item, seen));
+  return Array.from(new Set(nested));
+}
+function getErrorMessage(error, fallback) {
+  const messages = collectMessages(error, /* @__PURE__ */ new Set());
+  if (messages.length === 0) {
+    return fallback;
+  }
+  return messages.join("; ");
+}
+
+// src/i18n.ts
 var import_obsidian = require("obsidian");
+var enMessages = {
+  blogApiBaseUrlName: "Blog API Base URL",
+  blogApiBaseUrlDesc: "The Mails Blog API base URL.",
+  blogApiBaseUrlPlaceholder: "https://mails-blog.canyin.uk",
+  obsidianPluginTokenName: "Obsidian Plugin Token",
+  obsidianPluginTokenDesc: "Generate this token in iOS Settings -> Obsidian Plugin, then paste it here.",
+  obsidianPluginTokenPlaceholder: "Paste the token copied from iOS Settings",
+  tokenPreview: (token) => `Token preview: ${token.slice(0, 8)}...${token.slice(-6)}`,
+  tokenNotConfigured: "Token not configured yet.",
+  tokenExpiresAt: (expiresAt) => `Token expires at: ${expiresAt}`,
+  testConnectionName: "Test Connection",
+  testConnectionDesc: "Verify that the current API URL and token can access your blog drafts.",
+  testConnectionButton: "Test",
+  connectionSuccess: (count) => `Connected successfully. ${count} post(s) visible.`,
+  connectionSuccessTokenRotated: (count) => `Connected successfully. ${count} post(s) visible. Token rotated and saved locally.`,
+  connectionSuccessRefreshWarning: (count, warning) => `Connected successfully. ${count} post(s) visible. Warning: current token works, but refresh failed: ${warning}`,
+  connectionTestFailed: "Connection test failed.",
+  saveCurrentNoteAsDraftCommand: "Save Current Note as Draft",
+  publishCurrentNoteCommand: "Publish Current Note",
+  unlinkCurrentNoteCommand: "Unlink Current Note from Blog Post",
+  syncCurrentNoteFromBlogCommand: "Sync Current Note From Blog",
+  showCurrentNoteVersionHistoryCommand: "Show Current Note Version History",
+  restoreCurrentNoteFromBlogVersionCommand: "Restore Current Note From Blog Version",
+  uploadImageCommand: "Upload Image",
+  openMarkdownNoteFirst: "Open a Markdown note first.",
+  failedToSaveDraft: "Failed to save draft.",
+  failedToPublishNote: "Failed to publish note.",
+  failedToUnlinkNote: "Failed to unlink note.",
+  failedToSyncCurrentNoteFromBlog: "Failed to sync current note from blog.",
+  failedToLoadVersionHistory: "Failed to load version history.",
+  failedToRestoreNoteFromVersionHistory: "Failed to restore note from version history.",
+  failedToUploadImage: "Failed to upload image.",
+  insertedImageMarkdown: (fileName) => `Inserted image markdown for ${fileName}`,
+  selectSupportedImageFile: "Please select a jpg, jpeg, png, webp, or gif image.",
+  versionHistoryViewTitle: "Mails Blog Version History",
+  versionHistoryTitle: "Version History",
+  currentNoteLabel: (fileName) => `Current note: ${fileName}`,
+  noSavedVersionsYet: "No saved versions yet.",
+  versionLabel: (versionNumber) => `Version ${versionNumber}`,
+  currentDraftBadge: "current draft",
+  currentPublishedBadge: "current published",
+  updatedAt: (value) => `Updated ${value}`,
+  publishedAt: (value) => `Published ${value}`,
+  categoryLabel: (value) => `Category ${value}`,
+  selectVersionToRestore: "Select a blog version to restore",
+  noMatchingVersionsFound: "No matching versions found.",
+  restoreSelectedVersion: "Restore selected version",
+  cancel: "Cancel",
+  restoreBlogVersionTitle: "Restore blog version?",
+  versionWillBecomeCurrentRemoteDraft: (versionNumber) => `Version ${versionNumber} will become the current remote draft.`,
+  replaceLocalNoteContent: (filePath) => `This also replaces the local note content in ${filePath}.`,
+  restore: "Restore",
+  savingDraft: "Saving draft to Mails Blog...",
+  draftSaved: (title) => `Draft saved to Mails Blog: ${title}`,
+  publishingCurrentNote: "Publishing current note to Mails Blog...",
+  published: (title) => `Published to Mails Blog: ${title}`,
+  removedLocalBinding: "Removed local Mails Blog binding from current note.",
+  syncingCurrentNote: "Syncing current note from Mails Blog...",
+  currentNoteNotLinked: "Current note is not linked to a Mails Blog post yet.",
+  currentNoteAlreadyMatches: (title) => `Current note already matches blog post: ${title}`,
+  localChangesNoRemoteUpdates: "Current note has local changes and no remote updates to pull. Publish it if you want to push those edits.",
+  bothChangedManualResolve: "Both local note and remote post may have changed. Publish local edits first or resolve manually before syncing.",
+  syncStoppedBothChanged: "Sync stopped because both the local note and the remote blog post changed since the last sync.",
+  localChangesNotOnBlog: "Current note has local changes that are not on the blog. Publish first if you want to keep the local version.",
+  noRemoteChangesToSync: (title) => `No remote changes to sync for: ${title}`,
+  syncedCurrentNote: (title) => `Synced current note from Mails Blog: ${title}`,
+  uploadingImage: (fileName) => `Uploading image: ${fileName}...`,
+  uploadedImage: (fileName) => `Uploaded image: ${fileName}`,
+  loadingVersionHistory: "Loading version history from Mails Blog...",
+  noSavedVersionsAvailableToRestore: "No saved versions available to restore.",
+  alreadyCurrentDraft: (versionLabel2) => `${versionLabel2} is already the current draft.`,
+  restoringSelectedVersion: "Restoring selected version...",
+  restoredIntoCurrentDraft: (versionLabel2) => `Restored ${versionLabel2} into current draft.`,
+  noBodyContentSavedForVersion: "No body content saved for this version.",
+  unexpectedFrontmatterDataShape: "Unexpected frontmatter data shape.",
+  currentNoteBodyEmpty: "Current note body is empty.",
+  imageUploadFailedStatus: (status) => `Image upload failed with status ${status}`,
+  requestFailedStatus: (status) => `Request failed with status ${status}`,
+  blogApiBaseUrlRequired: "Blog API Base URL is required.",
+  obsidianPluginTokenRequired: "Obsidian plugin token is required.",
+  tokenRefreshFailed: "Token refresh failed.",
+  statusLabel: (status) => {
+    switch (status) {
+      case "draft":
+        return "draft";
+      case "published":
+        return "published";
+      case "archived":
+        return "archived";
+      default:
+        return status;
+    }
+  }
+};
+var zhMessages = {
+  blogApiBaseUrlName: "\u535A\u5BA2 API \u5730\u5740",
+  blogApiBaseUrlDesc: "Mails Blog API \u7684\u57FA\u7840\u5730\u5740\u3002",
+  blogApiBaseUrlPlaceholder: "https://mails-blog.canyin.uk",
+  obsidianPluginTokenName: "Obsidian \u63D2\u4EF6\u4EE4\u724C",
+  obsidianPluginTokenDesc: "\u8BF7\u5148\u5728 iOS \u8BBE\u7F6E -> Obsidian Plugin \u4E2D\u751F\u6210\u4EE4\u724C\uFF0C\u7136\u540E\u7C98\u8D34\u5230\u8FD9\u91CC\u3002",
+  obsidianPluginTokenPlaceholder: "\u7C98\u8D34\u4ECE iOS \u8BBE\u7F6E\u590D\u5236\u7684\u4EE4\u724C",
+  tokenPreview: (token) => `\u4EE4\u724C\u9884\u89C8\uFF1A${token.slice(0, 8)}...${token.slice(-6)}`,
+  tokenNotConfigured: "\u8FD8\u6CA1\u6709\u914D\u7F6E\u4EE4\u724C\u3002",
+  tokenExpiresAt: (expiresAt) => `\u4EE4\u724C\u8FC7\u671F\u65F6\u95F4\uFF1A${expiresAt}`,
+  testConnectionName: "\u6D4B\u8BD5\u8FDE\u63A5",
+  testConnectionDesc: "\u9A8C\u8BC1\u5F53\u524D API \u5730\u5740\u548C\u4EE4\u724C\u662F\u5426\u53EF\u4EE5\u8BBF\u95EE\u4F60\u7684\u535A\u5BA2\u8349\u7A3F\u3002",
+  testConnectionButton: "\u6D4B\u8BD5",
+  connectionSuccess: (count) => `\u8FDE\u63A5\u6210\u529F\uFF0C\u53EF\u89C1 ${count} \u7BC7\u6587\u7AE0\u3002`,
+  connectionSuccessTokenRotated: (count) => `\u8FDE\u63A5\u6210\u529F\uFF0C\u53EF\u89C1 ${count} \u7BC7\u6587\u7AE0\u3002\u4EE4\u724C\u5DF2\u8F6E\u6362\u5E76\u4FDD\u5B58\u5230\u672C\u5730\u3002`,
+  connectionSuccessRefreshWarning: (count, warning) => `\u8FDE\u63A5\u6210\u529F\uFF0C\u53EF\u89C1 ${count} \u7BC7\u6587\u7AE0\u3002\u8B66\u544A\uFF1A\u5F53\u524D\u4EE4\u724C\u53EF\u7528\uFF0C\u4F46\u5237\u65B0\u5931\u8D25\uFF1A${warning}`,
+  connectionTestFailed: "\u8FDE\u63A5\u6D4B\u8BD5\u5931\u8D25\u3002",
+  saveCurrentNoteAsDraftCommand: "\u4FDD\u5B58\u5F53\u524D\u7B14\u8BB0\u4E3A\u8349\u7A3F",
+  publishCurrentNoteCommand: "\u53D1\u5E03\u5F53\u524D\u7B14\u8BB0",
+  unlinkCurrentNoteCommand: "\u53D6\u6D88\u5F53\u524D\u7B14\u8BB0\u4E0E\u535A\u5BA2\u6587\u7AE0\u7684\u5173\u8054",
+  syncCurrentNoteFromBlogCommand: "\u4ECE\u535A\u5BA2\u540C\u6B65\u5F53\u524D\u7B14\u8BB0",
+  showCurrentNoteVersionHistoryCommand: "\u67E5\u770B\u5F53\u524D\u7B14\u8BB0\u7684\u7248\u672C\u5386\u53F2",
+  restoreCurrentNoteFromBlogVersionCommand: "\u4ECE\u535A\u5BA2\u7248\u672C\u6062\u590D\u5F53\u524D\u7B14\u8BB0",
+  uploadImageCommand: "\u4E0A\u4F20\u56FE\u7247",
+  openMarkdownNoteFirst: "\u8BF7\u5148\u6253\u5F00\u4E00\u4E2A Markdown \u7B14\u8BB0\u3002",
+  failedToSaveDraft: "\u4FDD\u5B58\u8349\u7A3F\u5931\u8D25\u3002",
+  failedToPublishNote: "\u53D1\u5E03\u7B14\u8BB0\u5931\u8D25\u3002",
+  failedToUnlinkNote: "\u53D6\u6D88\u5173\u8054\u5931\u8D25\u3002",
+  failedToSyncCurrentNoteFromBlog: "\u4ECE\u535A\u5BA2\u540C\u6B65\u5F53\u524D\u7B14\u8BB0\u5931\u8D25\u3002",
+  failedToLoadVersionHistory: "\u52A0\u8F7D\u7248\u672C\u5386\u53F2\u5931\u8D25\u3002",
+  failedToRestoreNoteFromVersionHistory: "\u4ECE\u7248\u672C\u5386\u53F2\u6062\u590D\u7B14\u8BB0\u5931\u8D25\u3002",
+  failedToUploadImage: "\u4E0A\u4F20\u56FE\u7247\u5931\u8D25\u3002",
+  insertedImageMarkdown: (fileName) => `\u5DF2\u63D2\u5165\u56FE\u7247 Markdown\uFF1A${fileName}`,
+  selectSupportedImageFile: "\u8BF7\u9009\u62E9 jpg\u3001jpeg\u3001png\u3001webp \u6216 gif \u56FE\u7247\u3002",
+  versionHistoryViewTitle: "Mails Blog \u7248\u672C\u5386\u53F2",
+  versionHistoryTitle: "\u7248\u672C\u5386\u53F2",
+  currentNoteLabel: (fileName) => `\u5F53\u524D\u7B14\u8BB0\uFF1A${fileName}`,
+  noSavedVersionsYet: "\u8FD8\u6CA1\u6709\u5DF2\u4FDD\u5B58\u7684\u7248\u672C\u3002",
+  versionLabel: (versionNumber) => `\u7248\u672C ${versionNumber}`,
+  currentDraftBadge: "\u5F53\u524D\u8349\u7A3F",
+  currentPublishedBadge: "\u5F53\u524D\u5DF2\u53D1\u5E03",
+  updatedAt: (value) => `\u66F4\u65B0\u4E8E ${value}`,
+  publishedAt: (value) => `\u53D1\u5E03\u4E8E ${value}`,
+  categoryLabel: (value) => `\u5206\u7C7B ${value}`,
+  selectVersionToRestore: "\u9009\u62E9\u8981\u6062\u590D\u7684\u535A\u5BA2\u7248\u672C",
+  noMatchingVersionsFound: "\u6CA1\u6709\u627E\u5230\u5339\u914D\u7684\u7248\u672C\u3002",
+  restoreSelectedVersion: "\u6062\u590D\u6240\u9009\u7248\u672C",
+  cancel: "\u53D6\u6D88",
+  restoreBlogVersionTitle: "\u6062\u590D\u535A\u5BA2\u7248\u672C\uFF1F",
+  versionWillBecomeCurrentRemoteDraft: (versionNumber) => `\u7248\u672C ${versionNumber} \u5C06\u6210\u4E3A\u5F53\u524D\u8FDC\u7AEF\u8349\u7A3F\u3002`,
+  replaceLocalNoteContent: (filePath) => `\u8FD9\u4E5F\u4F1A\u66FF\u6362\u672C\u5730\u7B14\u8BB0\u5185\u5BB9\uFF1A${filePath}\u3002`,
+  restore: "\u6062\u590D",
+  savingDraft: "\u6B63\u5728\u4FDD\u5B58\u8349\u7A3F\u5230 Mails Blog...",
+  draftSaved: (title) => `\u8349\u7A3F\u5DF2\u4FDD\u5B58\u5230 Mails Blog\uFF1A${title}`,
+  publishingCurrentNote: "\u6B63\u5728\u53D1\u5E03\u5F53\u524D\u7B14\u8BB0\u5230 Mails Blog...",
+  published: (title) => `\u5DF2\u53D1\u5E03\u5230 Mails Blog\uFF1A${title}`,
+  removedLocalBinding: "\u5DF2\u79FB\u9664\u5F53\u524D\u7B14\u8BB0\u7684\u672C\u5730 Mails Blog \u7ED1\u5B9A\u3002",
+  syncingCurrentNote: "\u6B63\u5728\u4ECE Mails Blog \u540C\u6B65\u5F53\u524D\u7B14\u8BB0...",
+  currentNoteNotLinked: "\u5F53\u524D\u7B14\u8BB0\u8FD8\u6CA1\u6709\u5173\u8054\u5230 Mails Blog \u6587\u7AE0\u3002",
+  currentNoteAlreadyMatches: (title) => `\u5F53\u524D\u7B14\u8BB0\u5DF2\u4E0E\u535A\u5BA2\u6587\u7AE0\u4E00\u81F4\uFF1A${title}`,
+  localChangesNoRemoteUpdates: "\u5F53\u524D\u7B14\u8BB0\u6709\u672C\u5730\u6539\u52A8\uFF0C\u8FDC\u7AEF\u6CA1\u6709\u53EF\u62C9\u53D6\u7684\u66F4\u65B0\u3002\u5982\u679C\u8981\u63A8\u9001\u8FD9\u4E9B\u6539\u52A8\uFF0C\u8BF7\u5148\u53D1\u5E03\u3002",
+  bothChangedManualResolve: "\u672C\u5730\u7B14\u8BB0\u548C\u8FDC\u7AEF\u6587\u7AE0\u53EF\u80FD\u90FD\u5DF2\u53D8\u66F4\u3002\u8BF7\u5148\u53D1\u5E03\u672C\u5730\u6539\u52A8\uFF0C\u6216\u624B\u52A8\u5904\u7406\u51B2\u7A81\u540E\u518D\u540C\u6B65\u3002",
+  syncStoppedBothChanged: "\u540C\u6B65\u5DF2\u505C\u6B62\uFF0C\u56E0\u4E3A\u81EA\u4E0A\u6B21\u540C\u6B65\u540E\uFF0C\u672C\u5730\u7B14\u8BB0\u548C\u8FDC\u7AEF\u535A\u5BA2\u6587\u7AE0\u90FD\u53D1\u751F\u4E86\u53D8\u5316\u3002",
+  localChangesNotOnBlog: "\u5F53\u524D\u7B14\u8BB0\u6709\u5C1A\u672A\u540C\u6B65\u5230\u535A\u5BA2\u7684\u672C\u5730\u6539\u52A8\u3002\u5982\u679C\u60F3\u4FDD\u7559\u672C\u5730\u7248\u672C\uFF0C\u8BF7\u5148\u53D1\u5E03\u3002",
+  noRemoteChangesToSync: (title) => `\u6CA1\u6709\u53EF\u540C\u6B65\u7684\u8FDC\u7AEF\u66F4\u65B0\uFF1A${title}`,
+  syncedCurrentNote: (title) => `\u5DF2\u4ECE Mails Blog \u540C\u6B65\u5F53\u524D\u7B14\u8BB0\uFF1A${title}`,
+  uploadingImage: (fileName) => `\u6B63\u5728\u4E0A\u4F20\u56FE\u7247\uFF1A${fileName}...`,
+  uploadedImage: (fileName) => `\u56FE\u7247\u5DF2\u4E0A\u4F20\uFF1A${fileName}`,
+  loadingVersionHistory: "\u6B63\u5728\u4ECE Mails Blog \u52A0\u8F7D\u7248\u672C\u5386\u53F2...",
+  noSavedVersionsAvailableToRestore: "\u6CA1\u6709\u53EF\u6062\u590D\u7684\u5DF2\u4FDD\u5B58\u7248\u672C\u3002",
+  alreadyCurrentDraft: (versionLabel2) => `${versionLabel2} \u5DF2\u7ECF\u662F\u5F53\u524D\u8349\u7A3F\u3002`,
+  restoringSelectedVersion: "\u6B63\u5728\u6062\u590D\u6240\u9009\u7248\u672C...",
+  restoredIntoCurrentDraft: (versionLabel2) => `\u5DF2\u5C06 ${versionLabel2} \u6062\u590D\u4E3A\u5F53\u524D\u8349\u7A3F\u3002`,
+  noBodyContentSavedForVersion: "\u8FD9\u4E2A\u7248\u672C\u6CA1\u6709\u4FDD\u5B58\u6B63\u6587\u5185\u5BB9\u3002",
+  unexpectedFrontmatterDataShape: "Frontmatter \u6570\u636E\u683C\u5F0F\u4E0D\u7B26\u5408\u9884\u671F\u3002",
+  currentNoteBodyEmpty: "\u5F53\u524D\u7B14\u8BB0\u6B63\u6587\u4E3A\u7A7A\u3002",
+  imageUploadFailedStatus: (status) => `\u56FE\u7247\u4E0A\u4F20\u5931\u8D25\uFF0C\u72B6\u6001\u7801 ${status}`,
+  requestFailedStatus: (status) => `\u8BF7\u6C42\u5931\u8D25\uFF0C\u72B6\u6001\u7801 ${status}`,
+  blogApiBaseUrlRequired: "\u5FC5\u987B\u586B\u5199\u535A\u5BA2 API \u5730\u5740\u3002",
+  obsidianPluginTokenRequired: "\u5FC5\u987B\u586B\u5199 Obsidian \u63D2\u4EF6\u4EE4\u724C\u3002",
+  tokenRefreshFailed: "\u4EE4\u724C\u5237\u65B0\u5931\u8D25\u3002",
+  statusLabel: (status) => {
+    switch (status) {
+      case "draft":
+        return "\u8349\u7A3F";
+      case "published":
+        return "\u5DF2\u53D1\u5E03";
+      case "archived":
+        return "\u5DF2\u5F52\u6863";
+      default:
+        return status;
+    }
+  }
+};
+function getMessages() {
+  const language = ((0, import_obsidian.requireApiVersion)("1.8.7") ? (0, import_obsidian.getLanguage)() : window.navigator.language).trim().toLowerCase();
+  if (!language.startsWith("zh")) {
+    return enMessages;
+  }
+  return {
+    ...enMessages,
+    ...zhMessages
+  };
+}
+
+// src/api.ts
 var MailsBlogApiError = class extends Error {
   constructor(message, status) {
     super(message);
@@ -68,6 +334,7 @@ var MailsBlogApiClient = class {
     this.options = options;
   }
   async testConnection() {
+    const messages = getMessages();
     const posts = await this.request("/api/posts/me", "GET", void 0, {
       skipTokenRefresh: true
     });
@@ -79,7 +346,7 @@ var MailsBlogApiClient = class {
         await this.refreshToken(currentToken);
         tokenRefreshed = true;
       } catch (error) {
-        refreshWarning = error instanceof Error ? error.message : "Token refresh failed.";
+        refreshWarning = getErrorMessage(error, messages.tokenRefreshFailed);
       }
     }
     return {
@@ -130,12 +397,13 @@ var MailsBlogApiClient = class {
     return response.post;
   }
   async uploadImage(data, filename, mimeType) {
+    const messages = getMessages();
     await this.ensureTokenReady();
     const blogApiBaseUrl = this.requireBaseUrl();
     const token = this.requireToken();
     const boundary = `Boundary-${crypto.randomUUID()}`;
     const body = createMultipartBody(boundary, "file", filename, mimeType, data);
-    const response = await (0, import_obsidian.requestUrl)({
+    const response = await (0, import_obsidian2.requestUrl)({
       url: `${blogApiBaseUrl}/api/uploads/images`,
       method: "POST",
       headers: {
@@ -150,12 +418,14 @@ var MailsBlogApiClient = class {
       return response.json;
     }
     const errorBody = response.json;
+    const fallbackText = response.text?.trim();
     throw new MailsBlogApiError(
-      errorBody?.message ?? errorBody?.error ?? `Image upload failed with status ${response.status}`,
+      getErrorMessage(errorBody ?? fallbackText, messages.imageUploadFailedStatus(response.status)),
       response.status
     );
   }
   async request(path, method, body, options = {}) {
+    const messages = getMessages();
     if (!options.skipTokenRefresh) {
       await this.ensureTokenReady();
     } else {
@@ -169,7 +439,7 @@ var MailsBlogApiClient = class {
     if (body !== void 0) {
       headers["Content-Type"] = "application/json";
     }
-    const response = await (0, import_obsidian.requestUrl)({
+    const response = await (0, import_obsidian2.requestUrl)({
       url: `${blogApiBaseUrl}${path}`,
       method,
       headers,
@@ -180,29 +450,33 @@ var MailsBlogApiClient = class {
       return response.json;
     }
     const errorBody = response.json;
+    const fallbackText = response.text?.trim();
     throw new MailsBlogApiError(
-      errorBody?.message ?? errorBody?.error ?? `Request failed with status ${response.status}`,
+      getErrorMessage(errorBody ?? fallbackText, messages.requestFailedStatus(response.status)),
       response.status
     );
   }
   requireBaseUrl() {
+    const messages = getMessages();
     const blogApiBaseUrl = this.settings.blogApiBaseUrl.trim().replace(/\/+$/, "");
     if (!blogApiBaseUrl) {
-      throw new MailsBlogApiError("Blog API Base URL is required.");
+      throw new MailsBlogApiError(messages.blogApiBaseUrlRequired);
     }
     return blogApiBaseUrl;
   }
   requireToken() {
+    const messages = getMessages();
     const token = this.settings.obsidianPluginToken.trim();
     if (!token) {
-      throw new MailsBlogApiError("Obsidian plugin token is required.");
+      throw new MailsBlogApiError(messages.obsidianPluginTokenRequired);
     }
     return token;
   }
   async ensureTokenReady() {
+    const messages = getMessages();
     const token = this.settings.obsidianPluginToken.trim();
     if (!token) {
-      throw new MailsBlogApiError("Obsidian plugin token is required.");
+      throw new MailsBlogApiError(messages.obsidianPluginTokenRequired);
     }
     if (this.shouldRefreshToken()) {
       await this.refreshToken(token);
@@ -221,8 +495,9 @@ var MailsBlogApiClient = class {
     return expiresAtMs - Date.now() <= refreshThresholdMs;
   }
   async refreshToken(currentToken) {
+    const messages = getMessages();
     const blogApiBaseUrl = this.requireBaseUrl();
-    const response = await (0, import_obsidian.requestUrl)({
+    const response = await (0, import_obsidian2.requestUrl)({
       url: `${blogApiBaseUrl}/api/plugin-auth/refresh`,
       method: "POST",
       headers: {
@@ -234,7 +509,8 @@ var MailsBlogApiClient = class {
     });
     if (response.status < 200 || response.status >= 300) {
       const errorBody = response.json;
-      const message = typeof errorBody?.error === "string" ? errorBody.error : errorBody?.error?.message ?? errorBody?.message ?? "Token refresh failed.";
+      const fallbackText = response.text?.trim();
+      const message = getErrorMessage(errorBody ?? fallbackText, messages.tokenRefreshFailed);
       throw new MailsBlogApiError(message, response.status);
     }
     const payload = response.json;
@@ -267,16 +543,17 @@ function escapeQuotes(value) {
 }
 
 // src/frontmatter.ts
-var import_obsidian2 = require("obsidian");
-function isRecord(value) {
+var import_obsidian3 = require("obsidian");
+function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readFrontmatterShape(value) {
-  return isRecord(value) ? value : {};
+  return isRecord2(value) ? value : {};
 }
 function requireFrontmatterShape(value) {
-  if (!isRecord(value)) {
-    throw new Error("Unexpected frontmatter data shape.");
+  const messages = getMessages();
+  if (!isRecord2(value)) {
+    throw new Error(messages.unexpectedFrontmatterDataShape);
   }
   return value;
 }
@@ -371,7 +648,7 @@ async function replaceNoteWithPost(app, file, post, blogApiBaseUrl) {
       frontmatterObject[key] = value;
     }
   }
-  const frontmatterText = (0, import_obsidian2.stringifyYaml)(frontmatterObject).trim();
+  const frontmatterText = (0, import_obsidian3.stringifyYaml)(frontmatterObject).trim();
   const body = (post.content_markdown ?? "").trim();
   const nextContent = frontmatterText ? `---
 ${frontmatterText}
@@ -381,6 +658,7 @@ ${body}${body ? "\n" : ""}` : `${body}${body ? "\n" : ""}`;
   await app.vault.process(file, () => nextContent);
 }
 async function parseNoteMetadata(app, file) {
+  const messages = getMessages();
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
   const frontmatter = readFrontmatterShape(cache?.frontmatter);
@@ -392,7 +670,7 @@ async function parseNoteMetadata(app, file) {
   const cardImage = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.cardImage);
   const body = stripFrontmatter(content);
   if (!body) {
-    throw new Error("Current note body is empty.");
+    throw new Error(messages.currentNoteBodyEmpty);
   }
   return {
     title,
@@ -443,7 +721,7 @@ async function writePostBinding(app, file, post, blogApiBaseUrl) {
 }
 async function clearPostBinding(app, file) {
   const existingFrontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (!isRecord(existingFrontmatter)) {
+  if (!isRecord2(existingFrontmatter)) {
     return;
   }
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
@@ -460,7 +738,7 @@ async function clearPostBinding(app, file) {
 
 // src/publish-service.ts
 var BLOG_VERSION_HISTORY_VIEW_TYPE = "mails-blog-version-history";
-var BlogVersionHistoryView = class extends import_obsidian3.ItemView {
+var BlogVersionHistoryView = class extends import_obsidian4.ItemView {
   constructor(leaf) {
     super(leaf);
     this.versions = [];
@@ -471,7 +749,7 @@ var BlogVersionHistoryView = class extends import_obsidian3.ItemView {
     return BLOG_VERSION_HISTORY_VIEW_TYPE;
   }
   getDisplayText() {
-    return "Mails Blog Version History";
+    return getMessages().versionHistoryViewTitle;
   }
   async setState(state) {
     this.postTitle = state.postTitle;
@@ -486,20 +764,21 @@ var BlogVersionHistoryView = class extends import_obsidian3.ItemView {
     this.contentEl.empty();
   }
   render() {
+    const messages = getMessages();
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("mails-blog-version-history-view");
-    contentEl.createEl("h2", { text: this.postTitle || "Version History" });
+    contentEl.createEl("h2", { text: this.postTitle || messages.versionHistoryTitle });
     if (this.fileName) {
       contentEl.createEl("p", {
         cls: "mails-blog-version-history-subtitle",
-        text: `Current note: ${this.fileName}`
+        text: messages.currentNoteLabel(this.fileName)
       });
     }
     if (this.versions.length === 0) {
       contentEl.createEl("p", {
         cls: "mails-blog-version-history-empty",
-        text: "No saved versions yet."
+        text: messages.noSavedVersionsYet
       });
       return;
     }
@@ -507,22 +786,22 @@ var BlogVersionHistoryView = class extends import_obsidian3.ItemView {
     this.versions.forEach((version) => {
       const cardEl = listEl.createDiv({ cls: "mails-blog-version-history-card" });
       const topRow = cardEl.createDiv({ cls: "mails-blog-version-history-top" });
-      topRow.createEl("strong", { text: `Version ${version.version_number}` });
+      topRow.createEl("strong", { text: messages.versionLabel(version.version_number) });
       const badgesEl = topRow.createDiv({ cls: "mails-blog-version-history-badges" });
       badgesEl.createSpan({
         cls: `mails-blog-version-history-badge is-${version.status}`,
-        text: version.status
+        text: messages.statusLabel(version.status)
       });
       if (version.is_current_draft) {
         badgesEl.createSpan({
           cls: "mails-blog-version-history-badge is-current-draft",
-          text: "current draft"
+          text: messages.currentDraftBadge
         });
       }
       if (version.is_current_published) {
         badgesEl.createSpan({
           cls: "mails-blog-version-history-badge is-current-published",
-          text: "current published"
+          text: messages.currentPublishedBadge
         });
       }
       cardEl.createEl("div", {
@@ -530,9 +809,9 @@ var BlogVersionHistoryView = class extends import_obsidian3.ItemView {
         text: version.title
       });
       const metaParts = [
-        `Updated ${formatTimestamp(version.updated_at)}`,
-        version.published_at ? `Published ${formatTimestamp(version.published_at)}` : "",
-        version.category ? `Category ${version.category}` : ""
+        messages.updatedAt(formatTimestamp(version.updated_at)),
+        version.published_at ? messages.publishedAt(formatTimestamp(version.published_at)) : "",
+        version.category ? messages.categoryLabel(version.category) : ""
       ].filter(Boolean);
       if (metaParts.length > 0) {
         cardEl.createEl("div", {
@@ -577,17 +856,18 @@ function createClient(settings, onSettingsChanged) {
     }
   });
 }
-var BlogVersionSuggestModal = class extends import_obsidian3.SuggestModal {
+var BlogVersionSuggestModal = class extends import_obsidian4.SuggestModal {
   constructor(app, versions, resolveSelection) {
     super(app);
     this.versions = versions;
     this.didResolve = false;
+    const messages = getMessages();
     this.resolveSelection = resolveSelection;
-    this.setPlaceholder("Select a blog version to restore");
-    this.emptyStateText = "No matching versions found.";
+    this.setPlaceholder(messages.selectVersionToRestore);
+    this.emptyStateText = messages.noMatchingVersionsFound;
     this.setInstructions([
-      { command: "Enter", purpose: "Restore selected version" },
-      { command: "Esc", purpose: "Cancel" }
+      { command: "Enter", purpose: messages.restoreSelectedVersion },
+      { command: "Esc", purpose: messages.cancel }
     ]);
   }
   getSuggestions(query) {
@@ -607,12 +887,13 @@ var BlogVersionSuggestModal = class extends import_obsidian3.SuggestModal {
     });
   }
   renderSuggestion(version, el) {
+    const messages = getMessages();
     el.createDiv({ text: `${versionLabel(version)} \xB7 ${version.title}` });
     const details = [
-      version.status,
-      `Updated ${formatTimestamp(version.updated_at)}`,
-      version.is_current_draft ? "current draft" : "",
-      version.is_current_published ? "current published" : ""
+      messages.statusLabel(version.status),
+      messages.updatedAt(formatTimestamp(version.updated_at)),
+      version.is_current_draft ? messages.currentDraftBadge : "",
+      version.is_current_published ? messages.currentPublishedBadge : ""
     ].filter(Boolean);
     el.createEl("small", { text: details.join(" \xB7 ") });
   }
@@ -627,7 +908,7 @@ var BlogVersionSuggestModal = class extends import_obsidian3.SuggestModal {
     }
   }
 };
-var RestoreVersionConfirmationModal = class extends import_obsidian3.Modal {
+var RestoreVersionConfirmationModal = class extends import_obsidian4.Modal {
   constructor(app, file, version, resolveConfirmation) {
     super(app);
     this.file = file;
@@ -636,17 +917,18 @@ var RestoreVersionConfirmationModal = class extends import_obsidian3.Modal {
     this.resolveConfirmation = resolveConfirmation;
   }
   onOpen() {
-    this.setTitle("Restore blog version?");
+    const messages = getMessages();
+    this.setTitle(messages.restoreBlogVersionTitle);
     this.contentEl.createEl("p", {
-      text: `Version ${this.version.version_number} will become the current remote draft.`
+      text: messages.versionWillBecomeCurrentRemoteDraft(this.version.version_number)
     });
     this.contentEl.createEl("p", {
-      text: `This also replaces the local note content in ${this.file.path}.`
+      text: messages.replaceLocalNoteContent(this.file.path)
     });
     const actionsEl = this.contentEl.createDiv({ cls: "modal-button-container" });
     const restoreButton = actionsEl.createEl("button", {
       cls: "mod-warning",
-      text: "Restore"
+      text: messages.restore
     });
     restoreButton.addEventListener("click", () => {
       this.didResolve = true;
@@ -654,7 +936,7 @@ var RestoreVersionConfirmationModal = class extends import_obsidian3.Modal {
       this.close();
     });
     const cancelButton = actionsEl.createEl("button", {
-      text: "Cancel"
+      text: messages.cancel
     });
     cancelButton.addEventListener("click", () => {
       this.didResolve = true;
@@ -682,11 +964,12 @@ function confirmVersionRestore(app, file, version) {
   });
 }
 function versionLabel(version) {
-  return `Version ${version.version_number}`;
+  return getMessages().versionLabel(version.version_number);
 }
 async function saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian3.Notice("Saving draft to Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new import_obsidian4.Notice(messages.savingDraft, 0);
   const client = createClient(settings, onSettingsChanged);
   try {
     const metadata = await parseNoteMetadata(app, file);
@@ -694,7 +977,7 @@ async function saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged = a
     const post = metadata.postId ? await client.updateDraft(metadata.postId, payload) : await client.createDraft(payload);
     await writePostBinding(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new import_obsidian3.Notice(`Draft saved to Mails Blog: ${post.title}`);
+    new import_obsidian4.Notice(messages.draftSaved(post.title));
     return post;
   } catch (error) {
     progressNotice.hide();
@@ -703,14 +986,15 @@ async function saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged = a
 }
 async function publishCurrentNote(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian3.Notice("Publishing current note to Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new import_obsidian4.Notice(messages.publishingCurrentNote, 0);
   try {
     const draft = await saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged);
     const client = createClient(settings, onSettingsChanged);
     const post = await client.publish(draft.id);
     await writePostBinding(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new import_obsidian3.Notice(`Published to Mails Blog: ${post.title}`);
+    new import_obsidian4.Notice(messages.published(post.title));
     return post;
   } catch (error) {
     progressNotice.hide();
@@ -718,16 +1002,18 @@ async function publishCurrentNote(app, file, settings, onSettingsChanged = async
   }
 }
 async function unlinkCurrentNote(app, file) {
+  const messages = getMessages();
   await clearPostBinding(app, file);
-  new import_obsidian3.Notice("Removed local Mails Blog binding from current note.");
+  new import_obsidian4.Notice(messages.removedLocalBinding);
 }
 async function syncCurrentNoteFromBlog(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian3.Notice("Syncing current note from Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new import_obsidian4.Notice(messages.syncingCurrentNote, 0);
   try {
     const metadata = await parseNoteMetadata(app, file);
     if (!metadata.postId) {
-      throw new Error("Current note is not linked to a Mails Blog post yet.");
+      throw new Error(messages.currentNoteNotLinked);
     }
     const client = createClient(settings, onSettingsChanged);
     const post = await client.getPost(metadata.postId);
@@ -738,34 +1024,34 @@ async function syncCurrentNoteFromBlog(app, file, settings, onSettingsChanged = 
     if (localHash === remoteHash) {
       await writePostBinding(app, file, post, settings.blogApiBaseUrl);
       progressNotice.hide();
-      new import_obsidian3.Notice(`Current note already matches blog post: ${post.title}`);
+      new import_obsidian4.Notice(messages.currentNoteAlreadyMatches(post.title));
       return post;
     }
     if (!storedHash) {
       if (!remoteChangedByTimestamp) {
         progressNotice.hide();
-        throw new Error("Current note has local changes and no remote updates to pull. Publish it if you want to push those edits.");
+        throw new Error(messages.localChangesNoRemoteUpdates);
       }
-      throw new Error("Both local note and remote post may have changed. Publish local edits first or resolve manually before syncing.");
+      throw new Error(messages.bothChangedManualResolve);
     }
     const localChangedSinceLastSync = localHash !== storedHash;
     const remoteChangedSinceLastSync = remoteHash !== storedHash;
     if (localChangedSinceLastSync && remoteChangedSinceLastSync) {
-      throw new Error("Sync stopped because both the local note and the remote blog post changed since the last sync.");
+      throw new Error(messages.syncStoppedBothChanged);
     }
     if (localChangedSinceLastSync && !remoteChangedSinceLastSync) {
       progressNotice.hide();
-      throw new Error("Current note has local changes that are not on the blog. Publish first if you want to keep the local version.");
+      throw new Error(messages.localChangesNotOnBlog);
     }
     if (!remoteChangedSinceLastSync) {
       await writePostBinding(app, file, post, settings.blogApiBaseUrl);
       progressNotice.hide();
-      new import_obsidian3.Notice(`No remote changes to sync for: ${post.title}`);
+      new import_obsidian4.Notice(messages.noRemoteChangesToSync(post.title));
       return post;
     }
     await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new import_obsidian3.Notice(`Synced current note from Mails Blog: ${post.title}`);
+    new import_obsidian4.Notice(messages.syncedCurrentNote(post.title));
     return post;
   } catch (error) {
     progressNotice.hide();
@@ -774,12 +1060,13 @@ async function syncCurrentNoteFromBlog(app, file, settings, onSettingsChanged = 
 }
 async function uploadImageFile(file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian3.Notice(`Uploading image: ${file.name}...`, 0);
+  const messages = getMessages();
+  const progressNotice = new import_obsidian4.Notice(messages.uploadingImage(file.name), 0);
   try {
     const client = createClient(settings, onSettingsChanged);
     const uploaded = await client.uploadImage(file.data, file.name, file.mimeType);
     progressNotice.hide();
-    new import_obsidian3.Notice(`Uploaded image: ${file.name}`);
+    new import_obsidian4.Notice(messages.uploadedImage(file.name));
     return uploaded;
   } catch (error) {
     progressNotice.hide();
@@ -788,11 +1075,12 @@ async function uploadImageFile(file, settings, onSettingsChanged = async () => {
 }
 async function showCurrentNoteVersionHistory(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian3.Notice("Loading version history from Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new import_obsidian4.Notice(messages.loadingVersionHistory, 0);
   try {
     const metadata = await parseNoteMetadata(app, file);
     if (!metadata.postId) {
-      throw new Error("Current note is not linked to a Mails Blog post yet.");
+      throw new Error(messages.currentNoteNotLinked);
     }
     const client = createClient(settings, onSettingsChanged);
     const versions = await client.listPostVersions(metadata.postId);
@@ -818,36 +1106,37 @@ async function showCurrentNoteVersionHistory(app, file, settings, onSettingsChan
 }
 async function restoreCurrentNoteFromVersionHistory(app, file, settings, onSettingsChanged = async () => {
 }) {
-  const progressNotice = new import_obsidian3.Notice("Loading version history from Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new import_obsidian4.Notice(messages.loadingVersionHistory, 0);
   try {
     const metadata = await parseNoteMetadata(app, file);
     if (!metadata.postId) {
-      throw new Error("Current note is not linked to a Mails Blog post yet.");
+      throw new Error(messages.currentNoteNotLinked);
     }
     const client = createClient(settings, onSettingsChanged);
     const versions = await client.listPostVersions(metadata.postId);
     progressNotice.hide();
     if (versions.length === 0) {
-      throw new Error("No saved versions available to restore.");
+      throw new Error(messages.noSavedVersionsAvailableToRestore);
     }
     const selectedVersion = await chooseVersionToRestore(app, versions);
     if (!selectedVersion) {
       return null;
     }
     if (selectedVersion.is_current_draft) {
-      new import_obsidian3.Notice(`${versionLabel(selectedVersion)} is already the current draft.`);
+      new import_obsidian4.Notice(messages.alreadyCurrentDraft(versionLabel(selectedVersion)));
       return null;
     }
     const confirmed = await confirmVersionRestore(app, file, selectedVersion);
     if (!confirmed) {
       return null;
     }
-    const restoreNotice = new import_obsidian3.Notice("Restoring selected version...", 0);
+    const restoreNotice = new import_obsidian4.Notice(messages.restoringSelectedVersion, 0);
     try {
       const post = await client.restorePostVersion(metadata.postId, selectedVersion.id);
       await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
       restoreNotice.hide();
-      new import_obsidian3.Notice(`Restored ${versionLabel(selectedVersion)} into current draft.`);
+      new import_obsidian4.Notice(messages.restoredIntoCurrentDraft(versionLabel(selectedVersion)));
       return post;
     } catch (error) {
       restoreNotice.hide();
@@ -862,9 +1151,10 @@ function registerBlogVersionHistoryView(registerView) {
   registerView(BLOG_VERSION_HISTORY_VIEW_TYPE, (leaf) => new BlogVersionHistoryView(leaf));
 }
 function previewBody(body) {
+  const messages = getMessages();
   const normalized = body.trim();
   if (!normalized) {
-    return "No body content saved for this version.";
+    return messages.noBodyContentSavedForVersion;
   }
   return normalized.length > 800 ? `${normalized.slice(0, 800).trimEnd()}
 \u2026` : normalized;
@@ -882,24 +1172,27 @@ function formatTimestamp(value) {
 
 // src/commands.ts
 function getCurrentMarkdownFile(app) {
-  const activeView = app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
+  const messages = getMessages();
+  const activeView = app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
   const file = activeView?.file;
   if (!file) {
-    throw new Error("Open a Markdown note first.");
+    throw new Error(messages.openMarkdownNoteFirst);
   }
   return file;
 }
 function getCurrentMarkdownView(app) {
-  const activeView = app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
+  const messages = getMessages();
+  const activeView = app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
   if (!activeView) {
-    throw new Error("Open a Markdown note first.");
+    throw new Error(messages.openMarkdownNoteFirst);
   }
   return activeView;
 }
 function registerCommands(app, plugin) {
+  const messages = getMessages();
   plugin.addCommand({
     id: "save-current-note-as-draft",
-    name: "Save Current Note as Draft",
+    name: messages.saveCurrentNoteAsDraftCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -907,13 +1200,13 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to save draft.");
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToSaveDraft));
       }
     }
   });
   plugin.addCommand({
     id: "publish-current-note",
-    name: "Publish Current Note",
+    name: messages.publishCurrentNoteCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -921,25 +1214,25 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to publish note.");
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToPublishNote));
       }
     }
   });
   plugin.addCommand({
     id: "unlink-current-note",
-    name: "Unlink Current Note from Blog Post",
+    name: messages.unlinkCurrentNoteCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
         await unlinkCurrentNote(app, file);
       } catch (error) {
-        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to unlink note.");
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToUnlinkNote));
       }
     }
   });
   plugin.addCommand({
     id: "sync-current-note-from-blog",
-    name: "Sync Current Note From Blog",
+    name: messages.syncCurrentNoteFromBlogCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -947,13 +1240,13 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToSyncCurrentNoteFromBlog));
       }
     }
   });
   plugin.addCommand({
     id: "show-current-note-version-history",
-    name: "Show Current Note Version History",
+    name: messages.showCurrentNoteVersionHistoryCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -961,13 +1254,13 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to load version history.");
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToLoadVersionHistory));
       }
     }
   });
   plugin.addCommand({
     id: "restore-current-note-from-blog-version",
-    name: "Restore Current Note From Blog Version",
+    name: messages.restoreCurrentNoteFromBlogVersionCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -975,13 +1268,13 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
       } catch (error) {
-        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to restore note from version history.");
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToRestoreNoteFromVersionHistory));
       }
     }
   });
   plugin.addCommand({
     id: "upload-image-from-vault",
-    name: "Upload Image",
+    name: messages.uploadImageCommand,
     callback: async () => {
       try {
         const view = getCurrentMarkdownView(app);
@@ -993,14 +1286,15 @@ function registerCommands(app, plugin) {
           await plugin.saveSettings();
         });
         view.editor.replaceSelection(uploaded.markdown);
-        new import_obsidian4.Notice(`Inserted image markdown for ${imageFile.name}`);
+        new import_obsidian5.Notice(messages.insertedImageMarkdown(imageFile.name));
       } catch (error) {
-        new import_obsidian4.Notice(error instanceof Error ? error.message : "Failed to upload image.");
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToUploadImage));
       }
     }
   });
 }
 function promptForImageFile() {
+  const messages = getMessages();
   return new Promise((resolve, reject) => {
     const activeDocument = window.activeDocument;
     const input = activeDocument.createElement("input");
@@ -1034,7 +1328,7 @@ function promptForImageFile() {
             }
             const mimeType = normalizeSelectedFileMimeType(file);
             if (!mimeType) {
-              throw new Error("Please select a jpg, jpeg, png, webp, or gif image.");
+              throw new Error(messages.selectSupportedImageFile);
             }
             const data = await file.arrayBuffer();
             cleanup();
@@ -1086,8 +1380,8 @@ function normalizeSelectedFileMimeType(file) {
 }
 
 // src/settings.ts
-var import_obsidian5 = require("obsidian");
-var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
+var import_obsidian6 = require("obsidian");
+var MailsBlogSettingTab = class extends import_obsidian6.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -1095,14 +1389,15 @@ var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian5.Setting(containerEl).setName("Blog API Base URL").setDesc("The Mails Blog API base URL.").addText((text) => {
-      text.setPlaceholder("https://mails-blog.canyin.uk").setValue(this.plugin.settings.blogApiBaseUrl).onChange(async (value) => {
+    const messages = getMessages();
+    new import_obsidian6.Setting(containerEl).setName(messages.blogApiBaseUrlName).setDesc(messages.blogApiBaseUrlDesc).addText((text) => {
+      text.setPlaceholder(messages.blogApiBaseUrlPlaceholder).setValue(this.plugin.settings.blogApiBaseUrl).onChange(async (value) => {
         this.plugin.settings.blogApiBaseUrl = value.trim();
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian5.Setting(containerEl).setName("Obsidian Plugin Token").setDesc("Generate this token in iOS Settings -> Obsidian Plugin, then paste it here.").addTextArea((text) => {
-      text.setPlaceholder("Paste the token copied from iOS Settings").setValue(this.plugin.settings.obsidianPluginToken).onChange(async (value) => {
+    new import_obsidian6.Setting(containerEl).setName(messages.obsidianPluginTokenName).setDesc(messages.obsidianPluginTokenDesc).addTextArea((text) => {
+      text.setPlaceholder(messages.obsidianPluginTokenPlaceholder).setValue(this.plugin.settings.obsidianPluginToken).onChange(async (value) => {
         this.plugin.settings.obsidianPluginToken = value.trim();
         await this.plugin.saveSettings();
       });
@@ -1110,15 +1405,15 @@ var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
     });
     const preview = containerEl.createDiv({ cls: "mails-blog-plugin-setting-help" });
     const token = this.plugin.settings.obsidianPluginToken.trim();
-    preview.setText(token ? `Token preview: ${token.slice(0, 8)}...${token.slice(-6)}` : "Token not configured yet.");
+    preview.setText(token ? messages.tokenPreview(token) : messages.tokenNotConfigured);
     if (this.plugin.settings.obsidianPluginTokenExpiresAt.trim()) {
       containerEl.createEl("p", {
         cls: "mails-blog-plugin-setting-help",
-        text: `Token expires at: ${this.plugin.settings.obsidianPluginTokenExpiresAt}`
+        text: messages.tokenExpiresAt(this.plugin.settings.obsidianPluginTokenExpiresAt)
       });
     }
-    new import_obsidian5.Setting(containerEl).setName("Test Connection").setDesc("Verify that the current API URL and token can access your blog drafts.").addButton((button) => {
-      button.setButtonText("Test");
+    new import_obsidian6.Setting(containerEl).setName(messages.testConnectionName).setDesc(messages.testConnectionDesc).addButton((button) => {
+      button.setButtonText(messages.testConnectionButton);
       button.onClick(async () => {
         button.setDisabled(true);
         try {
@@ -1129,17 +1424,16 @@ var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
           });
           const result = await client.testConnection();
           await this.plugin.saveSettings();
-          const baseMessage = `Connected successfully. ${result.posts.items.length} post(s) visible.`;
           if (result.tokenRefreshed) {
-            new import_obsidian5.Notice(`${baseMessage} Token rotated and saved locally.`);
+            new import_obsidian6.Notice(messages.connectionSuccessTokenRotated(result.posts.items.length));
           } else if (result.refreshWarning) {
-            new import_obsidian5.Notice(`${baseMessage} Warning: current token works, but refresh failed: ${result.refreshWarning}`);
+            new import_obsidian6.Notice(messages.connectionSuccessRefreshWarning(result.posts.items.length, result.refreshWarning));
           } else {
-            new import_obsidian5.Notice(baseMessage);
+            new import_obsidian6.Notice(messages.connectionSuccess(result.posts.items.length));
           }
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Connection test failed.";
-          new import_obsidian5.Notice(message);
+          const message = getErrorMessage(error, messages.connectionTestFailed);
+          new import_obsidian6.Notice(message);
         } finally {
           button.setDisabled(false);
         }
@@ -1149,14 +1443,14 @@ var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
 };
 
 // main.ts
-function isRecord2(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readStringSetting(value) {
   return typeof value === "string" ? value : void 0;
 }
 function parseLoadedSettings(value) {
-  if (!isRecord2(value)) {
+  if (!isRecord3(value)) {
     return {};
   }
   const parsed = {};
@@ -1174,7 +1468,7 @@ function parseLoadedSettings(value) {
   }
   return parsed;
 }
-var MailsBlogPublisherPlugin = class extends import_obsidian6.Plugin {
+var MailsBlogPublisherPlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;

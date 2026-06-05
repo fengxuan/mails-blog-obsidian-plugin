@@ -8,22 +8,26 @@ import {
   unlinkCurrentNote,
   uploadImageFile,
 } from "./publish-service";
+import { getErrorMessage } from "./errors";
+import { getMessages } from "./i18n";
 import type { MailsBlogPluginSettings } from "./types";
 import { TFile } from "obsidian";
 
 function getCurrentMarkdownFile(app: App): TFile {
+  const messages = getMessages();
   const activeView = app.workspace.getActiveViewOfType(MarkdownView);
   const file = activeView?.file;
   if (!file) {
-    throw new Error("Open a Markdown note first.");
+    throw new Error(messages.openMarkdownNoteFirst);
   }
   return file;
 }
 
 function getCurrentMarkdownView(app: App): MarkdownView {
+  const messages = getMessages();
   const activeView = app.workspace.getActiveViewOfType(MarkdownView);
   if (!activeView) {
-    throw new Error("Open a Markdown note first.");
+    throw new Error(messages.openMarkdownNoteFirst);
   }
   return activeView;
 }
@@ -40,9 +44,10 @@ export function registerCommands(
     saveSettings(): Promise<void>;
   },
 ): void {
+  const messages = getMessages();
   plugin.addCommand({
     id: "save-current-note-as-draft",
-    name: "Save Current Note as Draft",
+    name: messages.saveCurrentNoteAsDraftCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -50,14 +55,14 @@ export function registerCommands(
           await plugin.saveSettings();
         });
       } catch (error) {
-        new Notice(error instanceof Error ? error.message : "Failed to save draft.");
+        new Notice(getErrorMessage(error, messages.failedToSaveDraft));
       }
     },
   });
 
   plugin.addCommand({
     id: "publish-current-note",
-    name: "Publish Current Note",
+    name: messages.publishCurrentNoteCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -65,27 +70,27 @@ export function registerCommands(
           await plugin.saveSettings();
         });
       } catch (error) {
-        new Notice(error instanceof Error ? error.message : "Failed to publish note.");
+        new Notice(getErrorMessage(error, messages.failedToPublishNote));
       }
     },
   });
 
   plugin.addCommand({
     id: "unlink-current-note",
-    name: "Unlink Current Note from Blog Post",
+    name: messages.unlinkCurrentNoteCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
         await unlinkCurrentNote(app, file);
       } catch (error) {
-        new Notice(error instanceof Error ? error.message : "Failed to unlink note.");
+        new Notice(getErrorMessage(error, messages.failedToUnlinkNote));
       }
     },
   });
 
   plugin.addCommand({
     id: "sync-current-note-from-blog",
-    name: "Sync Current Note From Blog",
+    name: messages.syncCurrentNoteFromBlogCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -93,14 +98,14 @@ export function registerCommands(
           await plugin.saveSettings();
         });
       } catch (error) {
-        new Notice(error instanceof Error ? error.message : "Failed to sync current note from blog.");
+        new Notice(getErrorMessage(error, messages.failedToSyncCurrentNoteFromBlog));
       }
     },
   });
 
   plugin.addCommand({
     id: "show-current-note-version-history",
-    name: "Show Current Note Version History",
+    name: messages.showCurrentNoteVersionHistoryCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -108,14 +113,14 @@ export function registerCommands(
           await plugin.saveSettings();
         });
       } catch (error) {
-        new Notice(error instanceof Error ? error.message : "Failed to load version history.");
+        new Notice(getErrorMessage(error, messages.failedToLoadVersionHistory));
       }
     },
   });
 
   plugin.addCommand({
     id: "restore-current-note-from-blog-version",
-    name: "Restore Current Note From Blog Version",
+    name: messages.restoreCurrentNoteFromBlogVersionCommand,
     callback: async () => {
       try {
         const file = getCurrentMarkdownFile(app);
@@ -123,14 +128,14 @@ export function registerCommands(
           await plugin.saveSettings();
         });
       } catch (error) {
-        new Notice(error instanceof Error ? error.message : "Failed to restore note from version history.");
+        new Notice(getErrorMessage(error, messages.failedToRestoreNoteFromVersionHistory));
       }
     },
   });
 
   plugin.addCommand({
     id: "upload-image-from-vault",
-    name: "Upload Image",
+    name: messages.uploadImageCommand,
     callback: async () => {
       try {
         const view = getCurrentMarkdownView(app);
@@ -143,9 +148,9 @@ export function registerCommands(
           await plugin.saveSettings();
         });
         view.editor.replaceSelection(uploaded.markdown);
-        new Notice(`Inserted image markdown for ${imageFile.name}`);
+        new Notice(messages.insertedImageMarkdown(imageFile.name));
       } catch (error) {
-        new Notice(error instanceof Error ? error.message : "Failed to upload image.");
+        new Notice(getErrorMessage(error, messages.failedToUploadImage));
       }
     },
   });
@@ -158,6 +163,7 @@ type SelectedImageFile = {
 };
 
 function promptForImageFile(): Promise<SelectedImageFile | null> {
+  const messages = getMessages();
   return new Promise((resolve, reject) => {
     const activeDocument = window.activeDocument;
     const input = activeDocument.createElement("input");
@@ -195,7 +201,7 @@ function promptForImageFile(): Promise<SelectedImageFile | null> {
 
             const mimeType = normalizeSelectedFileMimeType(file);
             if (!mimeType) {
-              throw new Error("Please select a jpg, jpeg, png, webp, or gif image.");
+              throw new Error(messages.selectSupportedImageFile);
             }
 
             const data = await file.arrayBuffer();

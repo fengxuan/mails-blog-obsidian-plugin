@@ -16,6 +16,7 @@ import {
   replaceNoteWithPost,
   writePostBinding,
 } from "./frontmatter";
+import { getMessages } from "./i18n";
 import type { BlogImageUploadResponse, BlogPost, BlogPostVersion, MailsBlogPluginSettings, PostPayload } from "./types";
 
 export const BLOG_VERSION_HISTORY_VIEW_TYPE = "mails-blog-version-history";
@@ -34,7 +35,7 @@ class BlogVersionHistoryView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Mails Blog Version History";
+    return getMessages().versionHistoryViewTitle;
   }
 
   async setState(state: { postTitle: string; fileName: string; versions: BlogPostVersion[] }): Promise<void> {
@@ -53,22 +54,23 @@ class BlogVersionHistoryView extends ItemView {
   }
 
   private render(): void {
+    const messages = getMessages();
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("mails-blog-version-history-view");
 
-    contentEl.createEl("h2", { text: this.postTitle || "Version History" });
+    contentEl.createEl("h2", { text: this.postTitle || messages.versionHistoryTitle });
     if (this.fileName) {
       contentEl.createEl("p", {
         cls: "mails-blog-version-history-subtitle",
-        text: `Current note: ${this.fileName}`,
+        text: messages.currentNoteLabel(this.fileName),
       });
     }
 
     if (this.versions.length === 0) {
       contentEl.createEl("p", {
         cls: "mails-blog-version-history-empty",
-        text: "No saved versions yet.",
+        text: messages.noSavedVersionsYet,
       });
       return;
     }
@@ -77,23 +79,23 @@ class BlogVersionHistoryView extends ItemView {
     this.versions.forEach((version) => {
       const cardEl = listEl.createDiv({ cls: "mails-blog-version-history-card" });
       const topRow = cardEl.createDiv({ cls: "mails-blog-version-history-top" });
-      topRow.createEl("strong", { text: `Version ${version.version_number}` });
+      topRow.createEl("strong", { text: messages.versionLabel(version.version_number) });
 
       const badgesEl = topRow.createDiv({ cls: "mails-blog-version-history-badges" });
       badgesEl.createSpan({
         cls: `mails-blog-version-history-badge is-${version.status}`,
-        text: version.status,
+        text: messages.statusLabel(version.status),
       });
       if (version.is_current_draft) {
         badgesEl.createSpan({
           cls: "mails-blog-version-history-badge is-current-draft",
-          text: "current draft",
+          text: messages.currentDraftBadge,
         });
       }
       if (version.is_current_published) {
         badgesEl.createSpan({
           cls: "mails-blog-version-history-badge is-current-published",
-          text: "current published",
+          text: messages.currentPublishedBadge,
         });
       }
 
@@ -103,9 +105,9 @@ class BlogVersionHistoryView extends ItemView {
       });
 
       const metaParts = [
-        `Updated ${formatTimestamp(version.updated_at)}`,
-        version.published_at ? `Published ${formatTimestamp(version.published_at)}` : "",
-        version.category ? `Category ${version.category}` : "",
+        messages.updatedAt(formatTimestamp(version.updated_at)),
+        version.published_at ? messages.publishedAt(formatTimestamp(version.published_at)) : "",
+        version.category ? messages.categoryLabel(version.category) : "",
       ].filter(Boolean);
 
       if (metaParts.length > 0) {
@@ -166,12 +168,13 @@ class BlogVersionSuggestModal extends SuggestModal<BlogPostVersion> {
     resolveSelection: (version: BlogPostVersion | null) => void,
   ) {
     super(app);
+    const messages = getMessages();
     this.resolveSelection = resolveSelection;
-    this.setPlaceholder("Select a blog version to restore");
-    this.emptyStateText = "No matching versions found.";
+    this.setPlaceholder(messages.selectVersionToRestore);
+    this.emptyStateText = messages.noMatchingVersionsFound;
     this.setInstructions([
-      { command: "Enter", purpose: "Restore selected version" },
-      { command: "Esc", purpose: "Cancel" },
+      { command: "Enter", purpose: messages.restoreSelectedVersion },
+      { command: "Esc", purpose: messages.cancel },
     ]);
   }
 
@@ -194,12 +197,13 @@ class BlogVersionSuggestModal extends SuggestModal<BlogPostVersion> {
   }
 
   renderSuggestion(version: BlogPostVersion, el: HTMLElement): void {
+    const messages = getMessages();
     el.createDiv({ text: `${versionLabel(version)} · ${version.title}` });
     const details = [
-      version.status,
-      `Updated ${formatTimestamp(version.updated_at)}`,
-      version.is_current_draft ? "current draft" : "",
-      version.is_current_published ? "current published" : "",
+      messages.statusLabel(version.status),
+      messages.updatedAt(formatTimestamp(version.updated_at)),
+      version.is_current_draft ? messages.currentDraftBadge : "",
+      version.is_current_published ? messages.currentPublishedBadge : "",
     ].filter(Boolean);
     el.createEl("small", { text: details.join(" · ") });
   }
@@ -232,18 +236,19 @@ class RestoreVersionConfirmationModal extends Modal {
   }
 
   onOpen(): void {
-    this.setTitle("Restore blog version?");
+    const messages = getMessages();
+    this.setTitle(messages.restoreBlogVersionTitle);
     this.contentEl.createEl("p", {
-      text: `Version ${this.version.version_number} will become the current remote draft.`,
+      text: messages.versionWillBecomeCurrentRemoteDraft(this.version.version_number),
     });
     this.contentEl.createEl("p", {
-      text: `This also replaces the local note content in ${this.file.path}.`,
+      text: messages.replaceLocalNoteContent(this.file.path),
     });
 
     const actionsEl = this.contentEl.createDiv({ cls: "modal-button-container" });
     const restoreButton = actionsEl.createEl("button", {
       cls: "mod-warning",
-      text: "Restore",
+      text: messages.restore,
     });
     restoreButton.addEventListener("click", () => {
       this.didResolve = true;
@@ -252,7 +257,7 @@ class RestoreVersionConfirmationModal extends Modal {
     });
 
     const cancelButton = actionsEl.createEl("button", {
-      text: "Cancel",
+      text: messages.cancel,
     });
     cancelButton.addEventListener("click", () => {
       this.didResolve = true;
@@ -284,7 +289,7 @@ function confirmVersionRestore(app: App, file: TFile, version: BlogPostVersion):
 }
 
 function versionLabel(version: BlogPostVersion): string {
-  return `Version ${version.version_number}`;
+  return getMessages().versionLabel(version.version_number);
 }
 
 export async function saveCurrentNoteAsDraft(
@@ -293,7 +298,8 @@ export async function saveCurrentNoteAsDraft(
   settings: MailsBlogPluginSettings,
   onSettingsChanged: () => Promise<void> = async () => {},
 ): Promise<BlogPost> {
-  const progressNotice = new Notice("Saving draft to Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new Notice(messages.savingDraft, 0);
   const client = createClient(settings, onSettingsChanged);
   try {
     const metadata = await parseNoteMetadata(app, file);
@@ -303,7 +309,7 @@ export async function saveCurrentNoteAsDraft(
       : await client.createDraft(payload);
     await writePostBinding(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new Notice(`Draft saved to Mails Blog: ${post.title}`);
+    new Notice(messages.draftSaved(post.title));
     return post;
   } catch (error) {
     progressNotice.hide();
@@ -317,14 +323,15 @@ export async function publishCurrentNote(
   settings: MailsBlogPluginSettings,
   onSettingsChanged: () => Promise<void> = async () => {},
 ): Promise<BlogPost> {
-  const progressNotice = new Notice("Publishing current note to Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new Notice(messages.publishingCurrentNote, 0);
   try {
   const draft = await saveCurrentNoteAsDraft(app, file, settings, onSettingsChanged);
   const client = createClient(settings, onSettingsChanged);
   const post = await client.publish(draft.id);
   await writePostBinding(app, file, post, settings.blogApiBaseUrl);
   progressNotice.hide();
-  new Notice(`Published to Mails Blog: ${post.title}`);
+  new Notice(messages.published(post.title));
   return post;
   } catch (error) {
     progressNotice.hide();
@@ -333,8 +340,9 @@ export async function publishCurrentNote(
 }
 
 export async function unlinkCurrentNote(app: App, file: TFile): Promise<void> {
+  const messages = getMessages();
   await clearPostBinding(app, file);
-  new Notice("Removed local Mails Blog binding from current note.");
+  new Notice(messages.removedLocalBinding);
 }
 
 export async function syncCurrentNoteFromBlog(
@@ -343,11 +351,12 @@ export async function syncCurrentNoteFromBlog(
   settings: MailsBlogPluginSettings,
   onSettingsChanged: () => Promise<void> = async () => {},
 ): Promise<BlogPost> {
-  const progressNotice = new Notice("Syncing current note from Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new Notice(messages.syncingCurrentNote, 0);
   try {
     const metadata = await parseNoteMetadata(app, file);
     if (!metadata.postId) {
-      throw new Error("Current note is not linked to a Mails Blog post yet.");
+      throw new Error(messages.currentNoteNotLinked);
     }
 
     const client = createClient(settings, onSettingsChanged);
@@ -360,40 +369,40 @@ export async function syncCurrentNoteFromBlog(
     if (localHash === remoteHash) {
       await writePostBinding(app, file, post, settings.blogApiBaseUrl);
       progressNotice.hide();
-      new Notice(`Current note already matches blog post: ${post.title}`);
+      new Notice(messages.currentNoteAlreadyMatches(post.title));
       return post;
     }
 
     if (!storedHash) {
       if (!remoteChangedByTimestamp) {
         progressNotice.hide();
-        throw new Error("Current note has local changes and no remote updates to pull. Publish it if you want to push those edits.");
+        throw new Error(messages.localChangesNoRemoteUpdates);
       }
-      throw new Error("Both local note and remote post may have changed. Publish local edits first or resolve manually before syncing.");
+      throw new Error(messages.bothChangedManualResolve);
     }
 
     const localChangedSinceLastSync = localHash !== storedHash;
     const remoteChangedSinceLastSync = remoteHash !== storedHash;
 
     if (localChangedSinceLastSync && remoteChangedSinceLastSync) {
-      throw new Error("Sync stopped because both the local note and the remote blog post changed since the last sync.");
+      throw new Error(messages.syncStoppedBothChanged);
     }
 
     if (localChangedSinceLastSync && !remoteChangedSinceLastSync) {
       progressNotice.hide();
-      throw new Error("Current note has local changes that are not on the blog. Publish first if you want to keep the local version.");
+      throw new Error(messages.localChangesNotOnBlog);
     }
 
     if (!remoteChangedSinceLastSync) {
       await writePostBinding(app, file, post, settings.blogApiBaseUrl);
       progressNotice.hide();
-      new Notice(`No remote changes to sync for: ${post.title}`);
+      new Notice(messages.noRemoteChangesToSync(post.title));
       return post;
     }
 
     await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
     progressNotice.hide();
-    new Notice(`Synced current note from Mails Blog: ${post.title}`);
+    new Notice(messages.syncedCurrentNote(post.title));
     return post;
   } catch (error) {
     progressNotice.hide();
@@ -410,12 +419,13 @@ export async function uploadImageFile(
   settings: MailsBlogPluginSettings,
   onSettingsChanged: () => Promise<void> = async () => {},
 ): Promise<BlogImageUploadResponse> {
-  const progressNotice = new Notice(`Uploading image: ${file.name}...`, 0);
+  const messages = getMessages();
+  const progressNotice = new Notice(messages.uploadingImage(file.name), 0);
   try {
     const client = createClient(settings, onSettingsChanged);
     const uploaded = await client.uploadImage(file.data, file.name, file.mimeType);
     progressNotice.hide();
-    new Notice(`Uploaded image: ${file.name}`);
+    new Notice(messages.uploadedImage(file.name));
     return uploaded;
   } catch (error) {
     progressNotice.hide();
@@ -429,11 +439,12 @@ export async function showCurrentNoteVersionHistory(
   settings: MailsBlogPluginSettings,
   onSettingsChanged: () => Promise<void> = async () => {},
 ): Promise<void> {
-  const progressNotice = new Notice("Loading version history from Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new Notice(messages.loadingVersionHistory, 0);
   try {
     const metadata = await parseNoteMetadata(app, file);
     if (!metadata.postId) {
-      throw new Error("Current note is not linked to a Mails Blog post yet.");
+      throw new Error(messages.currentNoteNotLinked);
     }
 
     const client = createClient(settings, onSettingsChanged);
@@ -466,11 +477,12 @@ export async function restoreCurrentNoteFromVersionHistory(
   settings: MailsBlogPluginSettings,
   onSettingsChanged: () => Promise<void> = async () => {},
 ): Promise<BlogPost | null> {
-  const progressNotice = new Notice("Loading version history from Mails Blog...", 0);
+  const messages = getMessages();
+  const progressNotice = new Notice(messages.loadingVersionHistory, 0);
   try {
     const metadata = await parseNoteMetadata(app, file);
     if (!metadata.postId) {
-      throw new Error("Current note is not linked to a Mails Blog post yet.");
+      throw new Error(messages.currentNoteNotLinked);
     }
 
     const client = createClient(settings, onSettingsChanged);
@@ -478,7 +490,7 @@ export async function restoreCurrentNoteFromVersionHistory(
     progressNotice.hide();
 
     if (versions.length === 0) {
-      throw new Error("No saved versions available to restore.");
+      throw new Error(messages.noSavedVersionsAvailableToRestore);
     }
 
     const selectedVersion = await chooseVersionToRestore(app, versions);
@@ -487,7 +499,7 @@ export async function restoreCurrentNoteFromVersionHistory(
     }
 
     if (selectedVersion.is_current_draft) {
-      new Notice(`${versionLabel(selectedVersion)} is already the current draft.`);
+      new Notice(messages.alreadyCurrentDraft(versionLabel(selectedVersion)));
       return null;
     }
 
@@ -496,12 +508,12 @@ export async function restoreCurrentNoteFromVersionHistory(
       return null;
     }
 
-    const restoreNotice = new Notice("Restoring selected version...", 0);
+    const restoreNotice = new Notice(messages.restoringSelectedVersion, 0);
     try {
       const post = await client.restorePostVersion(metadata.postId, selectedVersion.id);
       await replaceNoteWithPost(app, file, post, settings.blogApiBaseUrl);
       restoreNotice.hide();
-      new Notice(`Restored ${versionLabel(selectedVersion)} into current draft.`);
+      new Notice(messages.restoredIntoCurrentDraft(versionLabel(selectedVersion)));
       return post;
     } catch (error) {
       restoreNotice.hide();
@@ -520,9 +532,10 @@ export function registerBlogVersionHistoryView(
 }
 
 function previewBody(body: string): string {
+  const messages = getMessages();
   const normalized = body.trim();
   if (!normalized) {
-    return "No body content saved for this version.";
+    return messages.noBodyContentSavedForVersion;
   }
   return normalized.length > 800 ? `${normalized.slice(0, 800).trimEnd()}\n…` : normalized;
 }

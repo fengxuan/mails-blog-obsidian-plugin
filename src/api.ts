@@ -1,4 +1,6 @@
 import { requestUrl } from "obsidian";
+import { getErrorMessage } from "./errors";
+import { getMessages } from "./i18n";
 import type {
   BlogImageUploadResponse,
   BlogPost,
@@ -32,6 +34,7 @@ export class MailsBlogApiClient {
   ) {}
 
   async testConnection(): Promise<TestConnectionResult> {
+    const messages = getMessages();
     const posts = await this.request<PostListResponse>("/api/posts/me", "GET", undefined, {
       skipTokenRefresh: true,
     });
@@ -44,7 +47,7 @@ export class MailsBlogApiClient {
         await this.refreshToken(currentToken);
         tokenRefreshed = true;
       } catch (error) {
-        refreshWarning = error instanceof Error ? error.message : "Token refresh failed.";
+        refreshWarning = getErrorMessage(error, messages.tokenRefreshFailed);
       }
     }
 
@@ -104,6 +107,7 @@ export class MailsBlogApiClient {
   }
 
   async uploadImage(data: ArrayBuffer, filename: string, mimeType: string): Promise<BlogImageUploadResponse> {
+    const messages = getMessages();
     await this.ensureTokenReady();
     const blogApiBaseUrl = this.requireBaseUrl();
     const token = this.requireToken();
@@ -126,9 +130,10 @@ export class MailsBlogApiClient {
       return response.json as BlogImageUploadResponse;
     }
 
-    const errorBody = response.json as { error?: string; message?: string } | undefined;
+    const errorBody = response.json;
+    const fallbackText = response.text?.trim();
     throw new MailsBlogApiError(
-      errorBody?.message ?? errorBody?.error ?? `Image upload failed with status ${response.status}`,
+      getErrorMessage(errorBody ?? fallbackText, messages.imageUploadFailedStatus(response.status)),
       response.status,
     );
   }
@@ -139,6 +144,7 @@ export class MailsBlogApiClient {
     body?: unknown,
     options: { skipTokenRefresh?: boolean } = {},
   ): Promise<T> {
+    const messages = getMessages();
     if (!options.skipTokenRefresh) {
       await this.ensureTokenReady();
     } else {
@@ -166,33 +172,37 @@ export class MailsBlogApiClient {
       return response.json as T;
     }
 
-    const errorBody = response.json as { error?: string; message?: string } | undefined;
+    const errorBody = response.json;
+    const fallbackText = response.text?.trim();
     throw new MailsBlogApiError(
-      errorBody?.message ?? errorBody?.error ?? `Request failed with status ${response.status}`,
+      getErrorMessage(errorBody ?? fallbackText, messages.requestFailedStatus(response.status)),
       response.status,
     );
   }
 
   private requireBaseUrl(): string {
+    const messages = getMessages();
     const blogApiBaseUrl = this.settings.blogApiBaseUrl.trim().replace(/\/+$/, "");
     if (!blogApiBaseUrl) {
-      throw new MailsBlogApiError("Blog API Base URL is required.");
+      throw new MailsBlogApiError(messages.blogApiBaseUrlRequired);
     }
     return blogApiBaseUrl;
   }
 
   private requireToken(): string {
+    const messages = getMessages();
     const token = this.settings.obsidianPluginToken.trim();
     if (!token) {
-      throw new MailsBlogApiError("Obsidian plugin token is required.");
+      throw new MailsBlogApiError(messages.obsidianPluginTokenRequired);
     }
     return token;
   }
 
   private async ensureTokenReady(): Promise<void> {
+    const messages = getMessages();
     const token = this.settings.obsidianPluginToken.trim();
     if (!token) {
-      throw new MailsBlogApiError("Obsidian plugin token is required.");
+      throw new MailsBlogApiError(messages.obsidianPluginTokenRequired);
     }
 
     if (this.shouldRefreshToken()) {
@@ -216,6 +226,7 @@ export class MailsBlogApiClient {
   }
 
   private async refreshToken(currentToken: string): Promise<void> {
+    const messages = getMessages();
     const blogApiBaseUrl = this.requireBaseUrl();
     const response = await requestUrl({
       url: `${blogApiBaseUrl}/api/plugin-auth/refresh`,
@@ -229,10 +240,9 @@ export class MailsBlogApiClient {
     });
 
     if (response.status < 200 || response.status >= 300) {
-      const errorBody = response.json as { error?: { message?: string } | string; message?: string } | undefined;
-      const message = typeof errorBody?.error === "string"
-        ? errorBody.error
-        : errorBody?.error?.message ?? errorBody?.message ?? "Token refresh failed.";
+      const errorBody = response.json;
+      const fallbackText = response.text?.trim();
+      const message = getErrorMessage(errorBody ?? fallbackText, messages.tokenRefreshFailed);
       throw new MailsBlogApiError(message, response.status);
     }
 
