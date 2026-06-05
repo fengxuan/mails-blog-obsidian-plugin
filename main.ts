@@ -16,7 +16,7 @@ export default class MailsBlogPublisherPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const loaded = await this.loadData();
+    const loaded = await this.loadData() as Partial<MailsBlogPluginSettings> | null;
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...(loaded ?? {}),

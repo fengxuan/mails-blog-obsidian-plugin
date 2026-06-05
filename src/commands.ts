@@ -159,11 +159,12 @@ type SelectedImageFile = {
 
 function promptForImageFile(): Promise<SelectedImageFile | null> {
   return new Promise((resolve, reject) => {
-    const input = document.createElement("input");
+    const activeDocument = window.activeDocument;
+    const input = activeDocument.createElement("input");
     input.type = "file";
     input.accept = ".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif";
     input.addClass("mails-blog-hidden-file-input");
-    document.body.appendChild(input);
+    activeDocument.body.appendChild(input);
 
     const cleanup = () => {
       window.removeEventListener("focus", onWindowFocus, true);
@@ -182,31 +183,33 @@ function promptForImageFile(): Promise<SelectedImageFile | null> {
 
     input.addEventListener(
       "change",
-      async () => {
-        try {
-          const file = input.files?.item(0);
-          if (!file) {
+      () => {
+        void (async () => {
+          try {
+            const file = input.files?.item(0);
+            if (!file) {
+              cleanup();
+              resolve(null);
+              return;
+            }
+
+            const mimeType = normalizeSelectedFileMimeType(file);
+            if (!mimeType) {
+              throw new Error("Please select a jpg, jpeg, png, webp, or gif image.");
+            }
+
+            const data = await file.arrayBuffer();
             cleanup();
-            resolve(null);
-            return;
+            resolve({
+              data,
+              mimeType,
+              name: file.name,
+            });
+          } catch (error: unknown) {
+            cleanup();
+            reject(error instanceof Error ? error : new Error(String(error)));
           }
-
-          const mimeType = normalizeSelectedFileMimeType(file);
-          if (!mimeType) {
-            throw new Error("Please select a jpg, jpeg, png, webp, or gif image.");
-          }
-
-          const data = await file.arrayBuffer();
-          cleanup();
-          resolve({
-            data,
-            mimeType,
-            name: file.name,
-          });
-        } catch (error) {
-          cleanup();
-          reject(error);
-        }
+        })();
       },
       { once: true },
     );

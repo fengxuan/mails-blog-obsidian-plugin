@@ -453,7 +453,7 @@ export async function showCurrentNoteVersionHistory(
         versions,
       });
     }
-    app.workspace.revealLeaf(leaf);
+    await app.workspace.revealLeaf(leaf);
   } catch (error) {
     progressNotice.hide();
     throw error;

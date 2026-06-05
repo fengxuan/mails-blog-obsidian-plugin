@@ -2,6 +2,19 @@ import { stringifyYaml, TFile, type App } from "obsidian";
 import { FRONTMATTER_KEYS } from "./constants";
 import type { BlogPost, ParsedNoteMetadata } from "./types";
 
+type FrontmatterValue = string | string[] | number | boolean | null | undefined;
+type FrontmatterShape = Record<string, FrontmatterValue>;
+
+function readTrimmedFrontmatterString(frontmatter: FrontmatterShape, key: string): string | undefined {
+  const value = frontmatter[key];
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 function normalizeTags(input: unknown): string[] | undefined {
   if (Array.isArray(input)) {
     const tags = input
@@ -122,19 +135,13 @@ export async function replaceNoteWithPost(
 export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNoteMetadata> {
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
-  const frontmatter = cache?.frontmatter ?? {};
-  const frontmatterTitle = typeof frontmatter[FRONTMATTER_KEYS.title] === "string"
-    ? frontmatter[FRONTMATTER_KEYS.title].trim()
-    : "";
+  const frontmatter = (cache?.frontmatter ?? {}) as FrontmatterShape;
+  const frontmatterTitle = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.title) ?? "";
   const fallbackTitle = file.basename.trim();
   const title = frontmatterTitle || fallbackTitle;
-  const category = typeof frontmatter[FRONTMATTER_KEYS.category] === "string"
-    ? frontmatter[FRONTMATTER_KEYS.category].trim()
-    : undefined;
+  const category = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.category);
   const tags = normalizeTags(frontmatter[FRONTMATTER_KEYS.tags]);
-  const cardImage = typeof frontmatter[FRONTMATTER_KEYS.cardImage] === "string"
-    ? frontmatter[FRONTMATTER_KEYS.cardImage].trim()
-    : undefined;
+  const cardImage = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.cardImage);
 
   const body = stripFrontmatter(content);
   if (!body) {
@@ -146,27 +153,13 @@ export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNo
     category: category || undefined,
     tags,
     cardImage: cardImage || undefined,
-    postId: typeof frontmatter[FRONTMATTER_KEYS.postId] === "string"
-      ? frontmatter[FRONTMATTER_KEYS.postId].trim()
-      : undefined,
-    slug: typeof frontmatter[FRONTMATTER_KEYS.slug] === "string"
-      ? frontmatter[FRONTMATTER_KEYS.slug].trim()
-      : undefined,
-    url: typeof frontmatter[FRONTMATTER_KEYS.url] === "string"
-      ? frontmatter[FRONTMATTER_KEYS.url].trim()
-      : undefined,
-    status: typeof frontmatter[FRONTMATTER_KEYS.status] === "string"
-      ? frontmatter[FRONTMATTER_KEYS.status].trim()
-      : undefined,
-    authorSlug: typeof frontmatter[FRONTMATTER_KEYS.authorSlug] === "string"
-      ? frontmatter[FRONTMATTER_KEYS.authorSlug].trim()
-      : undefined,
-    updatedAt: typeof frontmatter[FRONTMATTER_KEYS.updatedAt] === "string"
-      ? frontmatter[FRONTMATTER_KEYS.updatedAt].trim()
-      : undefined,
-    syncHash: typeof frontmatter[FRONTMATTER_KEYS.syncHash] === "string"
-      ? frontmatter[FRONTMATTER_KEYS.syncHash].trim()
-      : undefined,
+    postId: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.postId),
+    slug: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.slug),
+    url: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.url),
+    status: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.status),
+    authorSlug: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.authorSlug),
+    updatedAt: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.updatedAt),
+    syncHash: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.syncHash),
     body,
   };
 }
@@ -177,7 +170,7 @@ export async function writePostBinding(
   post: BlogPost,
   blogApiBaseUrl: string,
 ): Promise<void> {
-  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+  await app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterShape) => {
     frontmatter[FRONTMATTER_KEYS.title] = post.title;
     if (post.category) {
       frontmatter[FRONTMATTER_KEYS.category] = post.category;
@@ -203,7 +196,7 @@ export async function writePostBinding(
     frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   });
   const syncHash = await computePostSyncHash(post);
-  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+  await app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterShape) => {
     frontmatter[FRONTMATTER_KEYS.syncHash] = syncHash;
   });
 }
@@ -214,7 +207,7 @@ export async function clearPostBinding(app: App, file: TFile): Promise<void> {
     return;
   }
 
-  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+  await app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterShape) => {
     delete frontmatter[FRONTMATTER_KEYS.postId];
     delete frontmatter[FRONTMATTER_KEYS.slug];
     delete frontmatter[FRONTMATTER_KEYS.url];

@@ -268,6 +268,14 @@ function escapeQuotes(value) {
 
 // src/frontmatter.ts
 var import_obsidian2 = require("obsidian");
+function readTrimmedFrontmatterString(frontmatter, key) {
+  const value = frontmatter[key];
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  return trimmed || void 0;
+}
 function normalizeTags(input) {
   if (Array.isArray(input)) {
     const tags = input.map((value) => String(value).trim()).filter((value) => value.length > 0);
@@ -361,12 +369,12 @@ async function parseNoteMetadata(app, file) {
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
   const frontmatter = cache?.frontmatter ?? {};
-  const frontmatterTitle = typeof frontmatter[FRONTMATTER_KEYS.title] === "string" ? frontmatter[FRONTMATTER_KEYS.title].trim() : "";
+  const frontmatterTitle = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.title) ?? "";
   const fallbackTitle = file.basename.trim();
   const title = frontmatterTitle || fallbackTitle;
-  const category = typeof frontmatter[FRONTMATTER_KEYS.category] === "string" ? frontmatter[FRONTMATTER_KEYS.category].trim() : void 0;
+  const category = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.category);
   const tags = normalizeTags(frontmatter[FRONTMATTER_KEYS.tags]);
-  const cardImage = typeof frontmatter[FRONTMATTER_KEYS.cardImage] === "string" ? frontmatter[FRONTMATTER_KEYS.cardImage].trim() : void 0;
+  const cardImage = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.cardImage);
   const body = stripFrontmatter(content);
   if (!body) {
     throw new Error("Current note body is empty.");
@@ -376,13 +384,13 @@ async function parseNoteMetadata(app, file) {
     category: category || void 0,
     tags,
     cardImage: cardImage || void 0,
-    postId: typeof frontmatter[FRONTMATTER_KEYS.postId] === "string" ? frontmatter[FRONTMATTER_KEYS.postId].trim() : void 0,
-    slug: typeof frontmatter[FRONTMATTER_KEYS.slug] === "string" ? frontmatter[FRONTMATTER_KEYS.slug].trim() : void 0,
-    url: typeof frontmatter[FRONTMATTER_KEYS.url] === "string" ? frontmatter[FRONTMATTER_KEYS.url].trim() : void 0,
-    status: typeof frontmatter[FRONTMATTER_KEYS.status] === "string" ? frontmatter[FRONTMATTER_KEYS.status].trim() : void 0,
-    authorSlug: typeof frontmatter[FRONTMATTER_KEYS.authorSlug] === "string" ? frontmatter[FRONTMATTER_KEYS.authorSlug].trim() : void 0,
-    updatedAt: typeof frontmatter[FRONTMATTER_KEYS.updatedAt] === "string" ? frontmatter[FRONTMATTER_KEYS.updatedAt].trim() : void 0,
-    syncHash: typeof frontmatter[FRONTMATTER_KEYS.syncHash] === "string" ? frontmatter[FRONTMATTER_KEYS.syncHash].trim() : void 0,
+    postId: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.postId),
+    slug: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.slug),
+    url: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.url),
+    status: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.status),
+    authorSlug: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.authorSlug),
+    updatedAt: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.updatedAt),
+    syncHash: readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.syncHash),
     body
   };
 }
@@ -784,7 +792,7 @@ async function showCurrentNoteVersionHistory(app, file, settings, onSettingsChan
         versions
       });
     }
-    app.workspace.revealLeaf(leaf);
+    await app.workspace.revealLeaf(leaf);
   } catch (error) {
     progressNotice.hide();
     throw error;
@@ -976,11 +984,12 @@ function registerCommands(app, plugin) {
 }
 function promptForImageFile() {
   return new Promise((resolve, reject) => {
-    const input = document.createElement("input");
+    const activeDocument = window.activeDocument;
+    const input = activeDocument.createElement("input");
     input.type = "file";
     input.accept = ".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif";
     input.addClass("mails-blog-hidden-file-input");
-    document.body.appendChild(input);
+    activeDocument.body.appendChild(input);
     const cleanup = () => {
       window.removeEventListener("focus", onWindowFocus, true);
       input.remove();
@@ -996,29 +1005,31 @@ function promptForImageFile() {
     };
     input.addEventListener(
       "change",
-      async () => {
-        try {
-          const file = input.files?.item(0);
-          if (!file) {
+      () => {
+        void (async () => {
+          try {
+            const file = input.files?.item(0);
+            if (!file) {
+              cleanup();
+              resolve(null);
+              return;
+            }
+            const mimeType = normalizeSelectedFileMimeType(file);
+            if (!mimeType) {
+              throw new Error("Please select a jpg, jpeg, png, webp, or gif image.");
+            }
+            const data = await file.arrayBuffer();
             cleanup();
-            resolve(null);
-            return;
+            resolve({
+              data,
+              mimeType,
+              name: file.name
+            });
+          } catch (error) {
+            cleanup();
+            reject(error instanceof Error ? error : new Error(String(error)));
           }
-          const mimeType = normalizeSelectedFileMimeType(file);
-          if (!mimeType) {
-            throw new Error("Please select a jpg, jpeg, png, webp, or gif image.");
-          }
-          const data = await file.arrayBuffer();
-          cleanup();
-          resolve({
-            data,
-            mimeType,
-            name: file.name
-          });
-        } catch (error) {
-          cleanup();
-          reject(error);
-        }
+        })();
       },
       { once: true }
     );
