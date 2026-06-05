@@ -979,7 +979,7 @@ function promptForImageFile() {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif";
-    input.style.display = "none";
+    input.addClass("mails-blog-hidden-file-input");
     document.body.appendChild(input);
     const cleanup = () => {
       window.removeEventListener("focus", onWindowFocus, true);

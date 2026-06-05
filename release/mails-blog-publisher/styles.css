@@ -1,3 +1,7 @@
+.mails-blog-hidden-file-input {
+  display: none;
+}
+
 .mails-blog-plugin-setting-help {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
