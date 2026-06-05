@@ -1,7 +1,7 @@
 {
   "id": "mails-blog-publisher",
   "name": "Mails Blog Publisher",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "minAppVersion": "1.7.2",
   "description": "Publish the current note to Mails Blog using a plugin token.",
   "author": "FengXuan",

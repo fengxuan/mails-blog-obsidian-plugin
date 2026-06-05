@@ -5,6 +5,37 @@ import { registerBlogVersionHistoryView } from "./src/publish-service";
 import { MailsBlogSettingTab } from "./src/settings";
 import type { MailsBlogPluginSettings } from "./src/types";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readStringSetting(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseLoadedSettings(value: unknown): Partial<MailsBlogPluginSettings> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const parsed: Partial<MailsBlogPluginSettings> = {};
+  const blogApiBaseUrl = readStringSetting(value.blogApiBaseUrl);
+  const obsidianPluginToken = readStringSetting(value.obsidianPluginToken);
+  const obsidianPluginTokenExpiresAt = readStringSetting(value.obsidianPluginTokenExpiresAt);
+
+  if (blogApiBaseUrl !== undefined) {
+    parsed.blogApiBaseUrl = blogApiBaseUrl;
+  }
+  if (obsidianPluginToken !== undefined) {
+    parsed.obsidianPluginToken = obsidianPluginToken;
+  }
+  if (obsidianPluginTokenExpiresAt !== undefined) {
+    parsed.obsidianPluginTokenExpiresAt = obsidianPluginTokenExpiresAt;
+  }
+
+  return parsed;
+}
+
 export default class MailsBlogPublisherPlugin extends Plugin {
   settings: MailsBlogPluginSettings = DEFAULT_SETTINGS;
 
@@ -16,10 +47,11 @@ export default class MailsBlogPublisherPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const loaded = await this.loadData() as Partial<MailsBlogPluginSettings> | null;
+    const loadedRaw: unknown = await this.loadData();
+    const loaded = parseLoadedSettings(loadedRaw);
     this.settings = {
       ...DEFAULT_SETTINGS,
-      ...(loaded ?? {}),
+      ...loaded,
     };
   }
 

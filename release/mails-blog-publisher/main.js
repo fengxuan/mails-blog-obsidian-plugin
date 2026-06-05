@@ -268,6 +268,18 @@ function escapeQuotes(value) {
 
 // src/frontmatter.ts
 var import_obsidian2 = require("obsidian");
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function readFrontmatterShape(value) {
+  return isRecord(value) ? value : {};
+}
+function requireFrontmatterShape(value) {
+  if (!isRecord(value)) {
+    throw new Error("Unexpected frontmatter data shape.");
+  }
+  return value;
+}
 function readTrimmedFrontmatterString(frontmatter, key) {
   const value = frontmatter[key];
   if (typeof value !== "string") {
@@ -329,7 +341,7 @@ async function computeMetadataSyncHash(metadata) {
 }
 async function replaceNoteWithPost(app, file, post, blogApiBaseUrl) {
   const cache = app.metadataCache.getFileCache(file);
-  const frontmatter = { ...cache?.frontmatter ?? {} };
+  const frontmatter = { ...readFrontmatterShape(cache?.frontmatter) };
   frontmatter[FRONTMATTER_KEYS.title] = post.title;
   if (post.category) {
     frontmatter[FRONTMATTER_KEYS.category] = post.category;
@@ -353,9 +365,12 @@ async function replaceNoteWithPost(app, file, post, blogApiBaseUrl) {
   frontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
   frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   frontmatter[FRONTMATTER_KEYS.syncHash] = await computePostSyncHash(post);
-  const frontmatterObject = Object.fromEntries(
-    Object.entries(frontmatter).filter(([, value]) => value !== void 0 && value !== null && value !== "")
-  );
+  const frontmatterObject = {};
+  for (const [key, value] of Object.entries(frontmatter)) {
+    if (value !== void 0 && value !== null && value !== "") {
+      frontmatterObject[key] = value;
+    }
+  }
   const frontmatterText = (0, import_obsidian2.stringifyYaml)(frontmatterObject).trim();
   const body = (post.content_markdown ?? "").trim();
   const nextContent = frontmatterText ? `---
@@ -368,7 +383,7 @@ ${body}${body ? "\n" : ""}` : `${body}${body ? "\n" : ""}`;
 async function parseNoteMetadata(app, file) {
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
-  const frontmatter = cache?.frontmatter ?? {};
+  const frontmatter = readFrontmatterShape(cache?.frontmatter);
   const frontmatterTitle = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.title) ?? "";
   const fallbackTitle = file.basename.trim();
   const title = frontmatterTitle || fallbackTitle;
@@ -396,47 +411,50 @@ async function parseNoteMetadata(app, file) {
 }
 async function writePostBinding(app, file, post, blogApiBaseUrl) {
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
-    frontmatter[FRONTMATTER_KEYS.title] = post.title;
+    const nextFrontmatter = requireFrontmatterShape(frontmatter);
+    nextFrontmatter[FRONTMATTER_KEYS.title] = post.title;
     if (post.category) {
-      frontmatter[FRONTMATTER_KEYS.category] = post.category;
+      nextFrontmatter[FRONTMATTER_KEYS.category] = post.category;
     } else {
-      delete frontmatter[FRONTMATTER_KEYS.category];
+      delete nextFrontmatter[FRONTMATTER_KEYS.category];
     }
     if (post.tags.length > 0) {
-      frontmatter[FRONTMATTER_KEYS.tags] = post.tags;
+      nextFrontmatter[FRONTMATTER_KEYS.tags] = post.tags;
     } else {
-      delete frontmatter[FRONTMATTER_KEYS.tags];
+      delete nextFrontmatter[FRONTMATTER_KEYS.tags];
     }
     if (post.card_image) {
-      frontmatter[FRONTMATTER_KEYS.cardImage] = post.card_image;
+      nextFrontmatter[FRONTMATTER_KEYS.cardImage] = post.card_image;
     } else {
-      delete frontmatter[FRONTMATTER_KEYS.cardImage];
+      delete nextFrontmatter[FRONTMATTER_KEYS.cardImage];
     }
-    frontmatter[FRONTMATTER_KEYS.postId] = post.id;
-    frontmatter[FRONTMATTER_KEYS.slug] = post.slug;
-    frontmatter[FRONTMATTER_KEYS.status] = post.status;
-    frontmatter[FRONTMATTER_KEYS.authorSlug] = post.author_slug;
-    frontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
-    frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
+    nextFrontmatter[FRONTMATTER_KEYS.postId] = post.id;
+    nextFrontmatter[FRONTMATTER_KEYS.slug] = post.slug;
+    nextFrontmatter[FRONTMATTER_KEYS.status] = post.status;
+    nextFrontmatter[FRONTMATTER_KEYS.authorSlug] = post.author_slug;
+    nextFrontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
+    nextFrontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   });
   const syncHash = await computePostSyncHash(post);
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
-    frontmatter[FRONTMATTER_KEYS.syncHash] = syncHash;
+    const nextFrontmatter = requireFrontmatterShape(frontmatter);
+    nextFrontmatter[FRONTMATTER_KEYS.syncHash] = syncHash;
   });
 }
 async function clearPostBinding(app, file) {
   const existingFrontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (!existingFrontmatter) {
+  if (!isRecord(existingFrontmatter)) {
     return;
   }
   await app.fileManager.processFrontMatter(file, (frontmatter) => {
-    delete frontmatter[FRONTMATTER_KEYS.postId];
-    delete frontmatter[FRONTMATTER_KEYS.slug];
-    delete frontmatter[FRONTMATTER_KEYS.url];
-    delete frontmatter[FRONTMATTER_KEYS.status];
-    delete frontmatter[FRONTMATTER_KEYS.authorSlug];
-    delete frontmatter[FRONTMATTER_KEYS.updatedAt];
-    delete frontmatter[FRONTMATTER_KEYS.syncHash];
+    const nextFrontmatter = requireFrontmatterShape(frontmatter);
+    delete nextFrontmatter[FRONTMATTER_KEYS.postId];
+    delete nextFrontmatter[FRONTMATTER_KEYS.slug];
+    delete nextFrontmatter[FRONTMATTER_KEYS.url];
+    delete nextFrontmatter[FRONTMATTER_KEYS.status];
+    delete nextFrontmatter[FRONTMATTER_KEYS.authorSlug];
+    delete nextFrontmatter[FRONTMATTER_KEYS.updatedAt];
+    delete nextFrontmatter[FRONTMATTER_KEYS.syncHash];
   });
 }
 
@@ -1131,6 +1149,31 @@ var MailsBlogSettingTab = class extends import_obsidian5.PluginSettingTab {
 };
 
 // main.ts
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function readStringSetting(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function parseLoadedSettings(value) {
+  if (!isRecord2(value)) {
+    return {};
+  }
+  const parsed = {};
+  const blogApiBaseUrl = readStringSetting(value.blogApiBaseUrl);
+  const obsidianPluginToken = readStringSetting(value.obsidianPluginToken);
+  const obsidianPluginTokenExpiresAt = readStringSetting(value.obsidianPluginTokenExpiresAt);
+  if (blogApiBaseUrl !== void 0) {
+    parsed.blogApiBaseUrl = blogApiBaseUrl;
+  }
+  if (obsidianPluginToken !== void 0) {
+    parsed.obsidianPluginToken = obsidianPluginToken;
+  }
+  if (obsidianPluginTokenExpiresAt !== void 0) {
+    parsed.obsidianPluginTokenExpiresAt = obsidianPluginTokenExpiresAt;
+  }
+  return parsed;
+}
 var MailsBlogPublisherPlugin = class extends import_obsidian6.Plugin {
   constructor() {
     super(...arguments);
@@ -1143,10 +1186,11 @@ var MailsBlogPublisherPlugin = class extends import_obsidian6.Plugin {
     registerCommands(this.app, this);
   }
   async loadSettings() {
-    const loaded = await this.loadData();
+    const loadedRaw = await this.loadData();
+    const loaded = parseLoadedSettings(loadedRaw);
     this.settings = {
       ...DEFAULT_SETTINGS,
-      ...loaded ?? {}
+      ...loaded
     };
   }
   async saveSettings() {

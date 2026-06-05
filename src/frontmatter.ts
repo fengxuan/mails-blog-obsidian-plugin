@@ -2,8 +2,23 @@ import { stringifyYaml, TFile, type App } from "obsidian";
 import { FRONTMATTER_KEYS } from "./constants";
 import type { BlogPost, ParsedNoteMetadata } from "./types";
 
-type FrontmatterValue = string | string[] | number | boolean | null | undefined;
-type FrontmatterShape = Record<string, FrontmatterValue>;
+type FrontmatterShape = Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readFrontmatterShape(value: unknown): FrontmatterShape {
+  return isRecord(value) ? value : {};
+}
+
+function requireFrontmatterShape(value: unknown): FrontmatterShape {
+  if (!isRecord(value)) {
+    throw new Error("Unexpected frontmatter data shape.");
+  }
+
+  return value;
+}
 
 function readTrimmedFrontmatterString(frontmatter: FrontmatterShape, key: string): string | undefined {
   const value = frontmatter[key];
@@ -94,7 +109,7 @@ export async function replaceNoteWithPost(
   blogApiBaseUrl: string,
 ): Promise<void> {
   const cache = app.metadataCache.getFileCache(file);
-  const frontmatter = { ...(cache?.frontmatter ?? {}) } as Record<string, unknown>;
+  const frontmatter = { ...readFrontmatterShape(cache?.frontmatter) };
 
   frontmatter[FRONTMATTER_KEYS.title] = post.title;
   if (post.category) {
@@ -121,9 +136,12 @@ export async function replaceNoteWithPost(
   frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   frontmatter[FRONTMATTER_KEYS.syncHash] = await computePostSyncHash(post);
 
-  const frontmatterObject = Object.fromEntries(
-    Object.entries(frontmatter).filter(([, value]) => value !== undefined && value !== null && value !== ""),
-  );
+  const frontmatterObject: FrontmatterShape = {};
+  for (const [key, value] of Object.entries(frontmatter)) {
+    if (value !== undefined && value !== null && value !== "") {
+      frontmatterObject[key] = value;
+    }
+  }
   const frontmatterText = stringifyYaml(frontmatterObject).trim();
   const body = (post.content_markdown ?? "").trim();
   const nextContent = frontmatterText
@@ -135,7 +153,7 @@ export async function replaceNoteWithPost(
 export async function parseNoteMetadata(app: App, file: TFile): Promise<ParsedNoteMetadata> {
   const content = await app.vault.read(file);
   const cache = app.metadataCache.getFileCache(file);
-  const frontmatter = (cache?.frontmatter ?? {}) as FrontmatterShape;
+  const frontmatter = readFrontmatterShape(cache?.frontmatter);
   const frontmatterTitle = readTrimmedFrontmatterString(frontmatter, FRONTMATTER_KEYS.title) ?? "";
   const fallbackTitle = file.basename.trim();
   const title = frontmatterTitle || fallbackTitle;
@@ -170,50 +188,53 @@ export async function writePostBinding(
   post: BlogPost,
   blogApiBaseUrl: string,
 ): Promise<void> {
-  await app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterShape) => {
-    frontmatter[FRONTMATTER_KEYS.title] = post.title;
+  await app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
+    const nextFrontmatter = requireFrontmatterShape(frontmatter);
+    nextFrontmatter[FRONTMATTER_KEYS.title] = post.title;
     if (post.category) {
-      frontmatter[FRONTMATTER_KEYS.category] = post.category;
+      nextFrontmatter[FRONTMATTER_KEYS.category] = post.category;
     } else {
-      delete frontmatter[FRONTMATTER_KEYS.category];
+      delete nextFrontmatter[FRONTMATTER_KEYS.category];
     }
     if (post.tags.length > 0) {
-      frontmatter[FRONTMATTER_KEYS.tags] = post.tags;
+      nextFrontmatter[FRONTMATTER_KEYS.tags] = post.tags;
     } else {
-      delete frontmatter[FRONTMATTER_KEYS.tags];
+      delete nextFrontmatter[FRONTMATTER_KEYS.tags];
     }
     if (post.card_image) {
-      frontmatter[FRONTMATTER_KEYS.cardImage] = post.card_image;
+      nextFrontmatter[FRONTMATTER_KEYS.cardImage] = post.card_image;
     } else {
-      delete frontmatter[FRONTMATTER_KEYS.cardImage];
+      delete nextFrontmatter[FRONTMATTER_KEYS.cardImage];
     }
 
-    frontmatter[FRONTMATTER_KEYS.postId] = post.id;
-    frontmatter[FRONTMATTER_KEYS.slug] = post.slug;
-    frontmatter[FRONTMATTER_KEYS.status] = post.status;
-    frontmatter[FRONTMATTER_KEYS.authorSlug] = post.author_slug;
-    frontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
-    frontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
+    nextFrontmatter[FRONTMATTER_KEYS.postId] = post.id;
+    nextFrontmatter[FRONTMATTER_KEYS.slug] = post.slug;
+    nextFrontmatter[FRONTMATTER_KEYS.status] = post.status;
+    nextFrontmatter[FRONTMATTER_KEYS.authorSlug] = post.author_slug;
+    nextFrontmatter[FRONTMATTER_KEYS.updatedAt] = post.updated_at;
+    nextFrontmatter[FRONTMATTER_KEYS.url] = `${blogApiBaseUrl.replace(/\/+$/, "")}/blog/${post.author_slug}/${post.slug}`;
   });
   const syncHash = await computePostSyncHash(post);
-  await app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterShape) => {
-    frontmatter[FRONTMATTER_KEYS.syncHash] = syncHash;
+  await app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
+    const nextFrontmatter = requireFrontmatterShape(frontmatter);
+    nextFrontmatter[FRONTMATTER_KEYS.syncHash] = syncHash;
   });
 }
 
 export async function clearPostBinding(app: App, file: TFile): Promise<void> {
   const existingFrontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (!existingFrontmatter) {
+  if (!isRecord(existingFrontmatter)) {
     return;
   }
 
-  await app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterShape) => {
-    delete frontmatter[FRONTMATTER_KEYS.postId];
-    delete frontmatter[FRONTMATTER_KEYS.slug];
-    delete frontmatter[FRONTMATTER_KEYS.url];
-    delete frontmatter[FRONTMATTER_KEYS.status];
-    delete frontmatter[FRONTMATTER_KEYS.authorSlug];
-    delete frontmatter[FRONTMATTER_KEYS.updatedAt];
-    delete frontmatter[FRONTMATTER_KEYS.syncHash];
+  await app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
+    const nextFrontmatter = requireFrontmatterShape(frontmatter);
+    delete nextFrontmatter[FRONTMATTER_KEYS.postId];
+    delete nextFrontmatter[FRONTMATTER_KEYS.slug];
+    delete nextFrontmatter[FRONTMATTER_KEYS.url];
+    delete nextFrontmatter[FRONTMATTER_KEYS.status];
+    delete nextFrontmatter[FRONTMATTER_KEYS.authorSlug];
+    delete nextFrontmatter[FRONTMATTER_KEYS.updatedAt];
+    delete nextFrontmatter[FRONTMATTER_KEYS.syncHash];
   });
 }
