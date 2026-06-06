@@ -5,6 +5,7 @@ import {
   saveCurrentNoteAsDraft,
   showCurrentNoteVersionHistory,
   syncCurrentNoteFromBlog,
+  uploadCurrentNoteUnsyncedImages,
   unlinkCurrentNote,
   uploadImageFile,
 } from "./publish-service";
@@ -151,6 +152,21 @@ export function registerCommands(
         new Notice(messages.insertedImageMarkdown(imageFile.name));
       } catch (error) {
         new Notice(getErrorMessage(error, messages.failedToUploadImage));
+      }
+    },
+  });
+
+  plugin.addCommand({
+    id: "upload-unsynced-images-in-current-note",
+    name: messages.uploadCurrentNoteUnsyncedImagesCommand,
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await uploadCurrentNoteUnsyncedImages(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new Notice(getErrorMessage(error, messages.failedToUploadCurrentNoteUnsyncedImages));
       }
     },
   });

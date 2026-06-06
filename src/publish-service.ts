@@ -3,9 +3,11 @@ import {
   Modal,
   Notice,
   SuggestModal,
+  TAbstractFile,
   TFile,
   WorkspaceLeaf,
   type App,
+  type EmbedCache,
 } from "obsidian";
 import { MailsBlogApiClient } from "./api";
 import {
@@ -17,7 +19,14 @@ import {
   writePostBinding,
 } from "./frontmatter";
 import { getMessages } from "./i18n";
-import type { BlogImageUploadResponse, BlogPost, BlogPostVersion, MailsBlogPluginSettings, PostPayload } from "./types";
+import type {
+  BlogImageUploadResponse,
+  BlogPost,
+  BlogPostVersion,
+  CurrentNoteImageSyncResult,
+  MailsBlogPluginSettings,
+  PostPayload,
+} from "./types";
 
 export const BLOG_VERSION_HISTORY_VIEW_TYPE = "mails-blog-version-history";
 
@@ -433,6 +442,98 @@ export async function uploadImageFile(
   }
 }
 
+type EmbeddedLocalImage = {
+  originalText: string;
+  resolvedFile: TFile;
+};
+
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+export async function uploadCurrentNoteUnsyncedImages(
+  app: App,
+  file: TFile,
+  settings: MailsBlogPluginSettings,
+  onSettingsChanged: () => Promise<void> = async () => {},
+): Promise<CurrentNoteImageSyncResult> {
+  const messages = getMessages();
+  const progressNotice = new Notice(messages.syncingCurrentNoteImages, 0);
+  try {
+    const content = await app.vault.read(file);
+    const embeddedImages = collectEmbeddedLocalImages(app, file, content);
+
+    if (embeddedImages.length === 0) {
+      progressNotice.hide();
+      new Notice(messages.noLocalImagesFoundInCurrentNote);
+      return {
+        uploadedCount: 0,
+        skippedCount: 0,
+        replacedContent: false,
+      };
+    }
+
+    let nextContent = content;
+    let uploadedCount = 0;
+    let skippedCount = 0;
+    const uploadsByFilePath = new Map<string, BlogImageUploadResponse>();
+
+    for (const embeddedImage of embeddedImages) {
+      if (!nextContent.includes(embeddedImage.originalText)) {
+        skippedCount += 1;
+        continue;
+      }
+
+      let uploaded = uploadsByFilePath.get(embeddedImage.resolvedFile.path);
+      if (!uploaded) {
+        const mimeType = normalizeVaultImageMimeType(embeddedImage.resolvedFile);
+        if (!mimeType) {
+          throw new Error(messages.unsupportedEmbeddedImageFormat(embeddedImage.resolvedFile.name));
+        }
+
+        const data = await app.vault.readBinary(embeddedImage.resolvedFile);
+        uploaded = await uploadImageFile(
+          {
+            data,
+            mimeType,
+            name: embeddedImage.resolvedFile.name,
+          },
+          settings,
+          onSettingsChanged,
+        );
+        uploadsByFilePath.set(embeddedImage.resolvedFile.path, uploaded);
+        uploadedCount += 1;
+      }
+
+      nextContent = replaceFirstOccurrence(nextContent, embeddedImage.originalText, uploaded.markdown);
+    }
+
+    if (uploadedCount === 0) {
+      progressNotice.hide();
+      new Notice(messages.noUnsyncedImagesFoundInCurrentNote);
+      return {
+        uploadedCount: 0,
+        skippedCount,
+        replacedContent: false,
+      };
+    }
+
+    await app.vault.modify(file, nextContent);
+    progressNotice.hide();
+    new Notice(messages.syncedCurrentNoteImages(uploadedCount, skippedCount));
+    return {
+      uploadedCount,
+      skippedCount,
+      replacedContent: true,
+    };
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
+}
+
 export async function showCurrentNoteVersionHistory(
   app: App,
   file: TFile,
@@ -549,4 +650,113 @@ function formatTimestamp(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function collectEmbeddedLocalImages(
+  app: App,
+  sourceFile: TFile,
+  content: string,
+): EmbeddedLocalImage[] {
+  const cache = app.metadataCache.getFileCache(sourceFile);
+  const embeds = cache?.embeds ?? [];
+  const results: EmbeddedLocalImage[] = [];
+  const seenRanges = new Set<string>();
+
+  for (const embed of embeds) {
+    const originalText = readOriginalEmbedText(content, embed);
+    if (!originalText) {
+      continue;
+    }
+    if (isRemoteImageReference(originalText)) {
+      continue;
+    }
+
+    const resolvedFile = resolveEmbeddedFile(app, sourceFile, embed);
+    if (!resolvedFile || !isSupportedImageFile(resolvedFile)) {
+      continue;
+    }
+
+    const rangeKey = `${embed.position.start.offset}:${embed.position.end.offset}`;
+    if (seenRanges.has(rangeKey)) {
+      continue;
+    }
+    seenRanges.add(rangeKey);
+    results.push({
+      originalText,
+      resolvedFile,
+    });
+  }
+
+  return results;
+}
+
+function readOriginalEmbedText(content: string, embed: EmbedCache): string | null {
+  const startOffset = embed.position.start.offset;
+  const endOffset = embed.position.end.offset;
+  if (!Number.isInteger(startOffset) || !Number.isInteger(endOffset) || startOffset < 0 || endOffset <= startOffset) {
+    return null;
+  }
+
+  const originalText = content.slice(startOffset, endOffset);
+  return originalText.trim() ? originalText : null;
+}
+
+function isRemoteImageReference(value: string): boolean {
+  return /!\[[^\]]*]\((?:https?:)?\/\//i.test(value) || /!\[[^\]]*]\(data:/i.test(value);
+}
+
+function resolveEmbeddedFile(app: App, sourceFile: TFile, embed: EmbedCache): TFile | null {
+  const linkpath = extractLinkpath(embed.link);
+  if (!linkpath) {
+    return null;
+  }
+
+  const resolved = app.metadataCache.getFirstLinkpathDest(linkpath, sourceFile.path);
+  if (resolved instanceof TFile) {
+    return resolved;
+  }
+  return null;
+}
+
+function extractLinkpath(link: string): string {
+  const trimmed = link.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const pipeIndex = trimmed.indexOf("|");
+  const withoutAlias = pipeIndex >= 0 ? trimmed.slice(0, pipeIndex) : trimmed;
+  const hashIndex = withoutAlias.indexOf("#");
+  return (hashIndex >= 0 ? withoutAlias.slice(0, hashIndex) : withoutAlias).trim();
+}
+
+function isSupportedImageFile(file: TAbstractFile): file is TFile {
+  if (!(file instanceof TFile)) {
+    return false;
+  }
+  return normalizeVaultImageMimeType(file) !== null;
+}
+
+function normalizeVaultImageMimeType(file: TFile): string | null {
+  const extension = file.extension.trim().toLowerCase();
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    default:
+      return null;
+  }
+}
+
+function replaceFirstOccurrence(content: string, target: string, replacement: string): string {
+  const index = content.indexOf(target);
+  if (index < 0) {
+    return content;
+  }
+  return content.slice(0, index) + replacement + content.slice(index + target.length);
 }

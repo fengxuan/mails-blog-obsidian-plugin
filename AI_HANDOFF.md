@@ -97,12 +97,13 @@ Important tradeoff:
 
 ### `src/commands.ts`
 
-Registers four commands:
+Registers five commands:
 
 - `Save Current Note as Draft`
 - `Publish Current Note`
 - `Unlink Current Note from Blog Post`
 - `Upload Image`
+- `Upload Unsynced Images in Current Note`
 
 ### `src/publish-service.ts`
 
@@ -123,6 +124,11 @@ Main orchestration layer.
   - Reads the explicitly selected image file in memory.
   - Validates or normalizes MIME type from the selected file.
   - Calls blog image upload API.
+- `uploadCurrentNoteUnsyncedImages(...)`
+  - Scans the current note for local embedded images.
+  - Resolves those embeds to vault files through Obsidian metadata.
+  - Uploads supported local images and replaces the embeds in-note with returned blog Markdown.
+  - Skips already-remote image references.
 
 ### `src/frontmatter.ts`
 
@@ -758,6 +764,35 @@ Backend upload behavior:
 Important rules:
 
 - The plugin currently supports only explicit local file selection, not clipboard/paste upload.
+
+### E. Upload Unsynced Images In Current Note
+
+Command entry:
+
+- `mails-blog-obsidian-plugin/src/commands.ts`
+  - command id: `upload-unsynced-images-in-current-note`
+  - requires an active markdown note
+
+Plugin flow:
+
+1. Command reads the current note body.
+2. Plugin inspects Obsidian `metadataCache` embeds for that note.
+3. It keeps only local embedded images that resolve to supported vault files:
+   - `png`
+   - `jpg`
+   - `jpeg`
+   - `webp`
+   - `gif`
+4. It skips images already referenced by remote URL.
+5. Each unique local image file is uploaded through `POST /api/uploads/images`.
+6. The note content is rewritten in place so matching local embeds become returned remote image Markdown.
+7. Duplicate references to the same local file reuse the first upload result.
+
+Important rules:
+
+- This command only touches images already referenced in the current note.
+- It does not scan unrelated vault files.
+- It does not currently auto-upload `card_image` frontmatter when that field is a local path.
 - The plugin validates the selected image type on the client, but the server still validates MIME type.
 - If future AI adds new image types, update both:
   - plugin picker/extension list

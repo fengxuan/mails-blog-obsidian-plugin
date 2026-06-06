@@ -145,6 +145,7 @@ var enMessages = {
   showCurrentNoteVersionHistoryCommand: "Show Current Note Version History",
   restoreCurrentNoteFromBlogVersionCommand: "Restore Current Note From Blog Version",
   uploadImageCommand: "Upload Image",
+  uploadCurrentNoteUnsyncedImagesCommand: "Upload Unsynced Images in Current Note",
   openMarkdownNoteFirst: "Open a Markdown note first.",
   failedToSaveDraft: "Failed to save draft.",
   failedToPublishNote: "Failed to publish note.",
@@ -153,8 +154,14 @@ var enMessages = {
   failedToLoadVersionHistory: "Failed to load version history.",
   failedToRestoreNoteFromVersionHistory: "Failed to restore note from version history.",
   failedToUploadImage: "Failed to upload image.",
+  failedToUploadCurrentNoteUnsyncedImages: "Failed to upload unsynced images in current note.",
   insertedImageMarkdown: (fileName) => `Inserted image markdown for ${fileName}`,
   selectSupportedImageFile: "Please select a jpg, jpeg, png, webp, or gif image.",
+  syncingCurrentNoteImages: "Uploading unsynced images in current note...",
+  noLocalImagesFoundInCurrentNote: "No local images found in the current note.",
+  noUnsyncedImagesFoundInCurrentNote: "All images in the current note are already synced.",
+  unsupportedEmbeddedImageFormat: (fileName) => `Unsupported embedded image format: ${fileName}`,
+  syncedCurrentNoteImages: (uploadedCount, skippedCount) => `Uploaded ${uploadedCount} image(s) from the current note. Skipped ${skippedCount}.`,
   versionHistoryViewTitle: "Mails Blog Version History",
   versionHistoryTitle: "Version History",
   currentNoteLabel: (fileName) => `Current note: ${fileName}`,
@@ -239,6 +246,7 @@ var zhMessages = {
   showCurrentNoteVersionHistoryCommand: "\u67E5\u770B\u5F53\u524D\u7B14\u8BB0\u7684\u7248\u672C\u5386\u53F2",
   restoreCurrentNoteFromBlogVersionCommand: "\u4ECE\u535A\u5BA2\u7248\u672C\u6062\u590D\u5F53\u524D\u7B14\u8BB0",
   uploadImageCommand: "\u4E0A\u4F20\u56FE\u7247",
+  uploadCurrentNoteUnsyncedImagesCommand: "\u4E0A\u4F20\u5F53\u524D\u7B14\u8BB0\u672A\u540C\u6B65\u7684\u5168\u90E8\u56FE\u7247",
   openMarkdownNoteFirst: "\u8BF7\u5148\u6253\u5F00\u4E00\u4E2A Markdown \u7B14\u8BB0\u3002",
   failedToSaveDraft: "\u4FDD\u5B58\u8349\u7A3F\u5931\u8D25\u3002",
   failedToPublishNote: "\u53D1\u5E03\u7B14\u8BB0\u5931\u8D25\u3002",
@@ -247,8 +255,14 @@ var zhMessages = {
   failedToLoadVersionHistory: "\u52A0\u8F7D\u7248\u672C\u5386\u53F2\u5931\u8D25\u3002",
   failedToRestoreNoteFromVersionHistory: "\u4ECE\u7248\u672C\u5386\u53F2\u6062\u590D\u7B14\u8BB0\u5931\u8D25\u3002",
   failedToUploadImage: "\u4E0A\u4F20\u56FE\u7247\u5931\u8D25\u3002",
+  failedToUploadCurrentNoteUnsyncedImages: "\u4E0A\u4F20\u5F53\u524D\u7B14\u8BB0\u672A\u540C\u6B65\u56FE\u7247\u5931\u8D25\u3002",
   insertedImageMarkdown: (fileName) => `\u5DF2\u63D2\u5165\u56FE\u7247 Markdown\uFF1A${fileName}`,
   selectSupportedImageFile: "\u8BF7\u9009\u62E9 jpg\u3001jpeg\u3001png\u3001webp \u6216 gif \u56FE\u7247\u3002",
+  syncingCurrentNoteImages: "\u6B63\u5728\u4E0A\u4F20\u5F53\u524D\u7B14\u8BB0\u672A\u540C\u6B65\u7684\u56FE\u7247...",
+  noLocalImagesFoundInCurrentNote: "\u5F53\u524D\u7B14\u8BB0\u4E2D\u6CA1\u6709\u627E\u5230\u672C\u5730\u56FE\u7247\u3002",
+  noUnsyncedImagesFoundInCurrentNote: "\u5F53\u524D\u7B14\u8BB0\u4E2D\u7684\u56FE\u7247\u90FD\u5DF2\u7ECF\u540C\u6B65\u3002",
+  unsupportedEmbeddedImageFormat: (fileName) => `\u4E0D\u652F\u6301\u7684\u5D4C\u5165\u56FE\u7247\u683C\u5F0F\uFF1A${fileName}`,
+  syncedCurrentNoteImages: (uploadedCount, skippedCount) => `\u5DF2\u4E0A\u4F20\u5F53\u524D\u7B14\u8BB0\u4E2D\u7684 ${uploadedCount} \u5F20\u56FE\u7247\uFF0C\u8DF3\u8FC7 ${skippedCount} \u5F20\u3002`,
   versionHistoryViewTitle: "Mails Blog \u7248\u672C\u5386\u53F2",
   versionHistoryTitle: "\u7248\u672C\u5386\u53F2",
   currentNoteLabel: (fileName) => `\u5F53\u524D\u7B14\u8BB0\uFF1A${fileName}`,
@@ -1073,6 +1087,74 @@ async function uploadImageFile(file, settings, onSettingsChanged = async () => {
     throw error;
   }
 }
+async function uploadCurrentNoteUnsyncedImages(app, file, settings, onSettingsChanged = async () => {
+}) {
+  const messages = getMessages();
+  const progressNotice = new import_obsidian4.Notice(messages.syncingCurrentNoteImages, 0);
+  try {
+    const content = await app.vault.read(file);
+    const embeddedImages = collectEmbeddedLocalImages(app, file, content);
+    if (embeddedImages.length === 0) {
+      progressNotice.hide();
+      new import_obsidian4.Notice(messages.noLocalImagesFoundInCurrentNote);
+      return {
+        uploadedCount: 0,
+        skippedCount: 0,
+        replacedContent: false
+      };
+    }
+    let nextContent = content;
+    let uploadedCount = 0;
+    let skippedCount = 0;
+    const uploadsByFilePath = /* @__PURE__ */ new Map();
+    for (const embeddedImage of embeddedImages) {
+      if (!nextContent.includes(embeddedImage.originalText)) {
+        skippedCount += 1;
+        continue;
+      }
+      let uploaded = uploadsByFilePath.get(embeddedImage.resolvedFile.path);
+      if (!uploaded) {
+        const mimeType = normalizeVaultImageMimeType(embeddedImage.resolvedFile);
+        if (!mimeType) {
+          throw new Error(messages.unsupportedEmbeddedImageFormat(embeddedImage.resolvedFile.name));
+        }
+        const data = await app.vault.readBinary(embeddedImage.resolvedFile);
+        uploaded = await uploadImageFile(
+          {
+            data,
+            mimeType,
+            name: embeddedImage.resolvedFile.name
+          },
+          settings,
+          onSettingsChanged
+        );
+        uploadsByFilePath.set(embeddedImage.resolvedFile.path, uploaded);
+        uploadedCount += 1;
+      }
+      nextContent = replaceFirstOccurrence(nextContent, embeddedImage.originalText, uploaded.markdown);
+    }
+    if (uploadedCount === 0) {
+      progressNotice.hide();
+      new import_obsidian4.Notice(messages.noUnsyncedImagesFoundInCurrentNote);
+      return {
+        uploadedCount: 0,
+        skippedCount,
+        replacedContent: false
+      };
+    }
+    await app.vault.modify(file, nextContent);
+    progressNotice.hide();
+    new import_obsidian4.Notice(messages.syncedCurrentNoteImages(uploadedCount, skippedCount));
+    return {
+      uploadedCount,
+      skippedCount,
+      replacedContent: true
+    };
+  } catch (error) {
+    progressNotice.hide();
+    throw error;
+  }
+}
 async function showCurrentNoteVersionHistory(app, file, settings, onSettingsChanged = async () => {
 }) {
   const messages = getMessages();
@@ -1168,6 +1250,97 @@ function formatTimestamp(value) {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(date);
+}
+function collectEmbeddedLocalImages(app, sourceFile, content) {
+  const cache = app.metadataCache.getFileCache(sourceFile);
+  const embeds = cache?.embeds ?? [];
+  const results = [];
+  const seenRanges = /* @__PURE__ */ new Set();
+  for (const embed of embeds) {
+    const originalText = readOriginalEmbedText(content, embed);
+    if (!originalText) {
+      continue;
+    }
+    if (isRemoteImageReference(originalText)) {
+      continue;
+    }
+    const resolvedFile = resolveEmbeddedFile(app, sourceFile, embed);
+    if (!resolvedFile || !isSupportedImageFile(resolvedFile)) {
+      continue;
+    }
+    const rangeKey = `${embed.position.start.offset}:${embed.position.end.offset}`;
+    if (seenRanges.has(rangeKey)) {
+      continue;
+    }
+    seenRanges.add(rangeKey);
+    results.push({
+      originalText,
+      resolvedFile
+    });
+  }
+  return results;
+}
+function readOriginalEmbedText(content, embed) {
+  const startOffset = embed.position.start.offset;
+  const endOffset = embed.position.end.offset;
+  if (!Number.isInteger(startOffset) || !Number.isInteger(endOffset) || startOffset < 0 || endOffset <= startOffset) {
+    return null;
+  }
+  const originalText = content.slice(startOffset, endOffset);
+  return originalText.trim() ? originalText : null;
+}
+function isRemoteImageReference(value) {
+  return /!\[[^\]]*]\((?:https?:)?\/\//i.test(value) || /!\[[^\]]*]\(data:/i.test(value);
+}
+function resolveEmbeddedFile(app, sourceFile, embed) {
+  const linkpath = extractLinkpath(embed.link);
+  if (!linkpath) {
+    return null;
+  }
+  const resolved = app.metadataCache.getFirstLinkpathDest(linkpath, sourceFile.path);
+  if (resolved instanceof import_obsidian4.TFile) {
+    return resolved;
+  }
+  return null;
+}
+function extractLinkpath(link) {
+  const trimmed = link.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const pipeIndex = trimmed.indexOf("|");
+  const withoutAlias = pipeIndex >= 0 ? trimmed.slice(0, pipeIndex) : trimmed;
+  const hashIndex = withoutAlias.indexOf("#");
+  return (hashIndex >= 0 ? withoutAlias.slice(0, hashIndex) : withoutAlias).trim();
+}
+function isSupportedImageFile(file) {
+  if (!(file instanceof import_obsidian4.TFile)) {
+    return false;
+  }
+  return normalizeVaultImageMimeType(file) !== null;
+}
+function normalizeVaultImageMimeType(file) {
+  const extension = file.extension.trim().toLowerCase();
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    default:
+      return null;
+  }
+}
+function replaceFirstOccurrence(content, target, replacement) {
+  const index = content.indexOf(target);
+  if (index < 0) {
+    return content;
+  }
+  return content.slice(0, index) + replacement + content.slice(index + target.length);
 }
 
 // src/commands.ts
@@ -1289,6 +1462,20 @@ function registerCommands(app, plugin) {
         new import_obsidian5.Notice(messages.insertedImageMarkdown(imageFile.name));
       } catch (error) {
         new import_obsidian5.Notice(getErrorMessage(error, messages.failedToUploadImage));
+      }
+    }
+  });
+  plugin.addCommand({
+    id: "upload-unsynced-images-in-current-note",
+    name: messages.uploadCurrentNoteUnsyncedImagesCommand,
+    callback: async () => {
+      try {
+        const file = getCurrentMarkdownFile(app);
+        await uploadCurrentNoteUnsyncedImages(app, file, plugin.settings, async () => {
+          await plugin.saveSettings();
+        });
+      } catch (error) {
+        new import_obsidian5.Notice(getErrorMessage(error, messages.failedToUploadCurrentNoteUnsyncedImages));
       }
     }
   });

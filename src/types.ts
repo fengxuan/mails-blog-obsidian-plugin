@@ -106,3 +106,9 @@ export interface ParsedNoteMetadata {
   syncHash?: string;
   body: string;
 }
+
+export interface CurrentNoteImageSyncResult {
+  uploadedCount: number;
+  skippedCount: number;
+  replacedContent: boolean;
+}

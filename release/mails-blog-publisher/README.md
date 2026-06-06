@@ -71,7 +71,8 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
 3. Publish when you are ready to make it live.
 4. Use `Sync Current Note From Blog` if the remote post changed elsewhere.
 5. Use `Upload Image` to choose a local image file and insert uploaded image Markdown into the current note.
-6. Use `Show Current Note Version History` to inspect saved draft and published snapshots for the linked post.
+6. Use `Upload Unsynced Images in Current Note` to batch-upload local images already referenced in the current note and replace them with blog-hosted Markdown.
+7. Use `Show Current Note Version History` to inspect saved draft and published snapshots for the linked post.
 
 ## Other Commands
 
@@ -81,6 +82,8 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
   - removes only the local link to the remote post
 - `Mails Blog: Upload Image`
   - choose a local `jpg`, `jpeg`, `png`, `webp`, or `gif` image file to upload
+- `Mails Blog: Upload Unsynced Images in Current Note`
+  - scans the current note for local embedded images, uploads supported ones, and replaces those embeds with blog-hosted image Markdown
 - `Mails Blog: Show Current Note Version History`
   - opens a read-only history view for the linked post's saved versions
 
@@ -99,7 +102,7 @@ The plugin writes the blog link and sync metadata back into frontmatter automati
 ## Privacy And Network Use
 
 - This plugin connects to your configured `Blog API Base URL`.
-- It sends your plugin token, note title, frontmatter metadata, note body, and the image file you explicitly choose only when you run publish, draft, sync, or image upload commands.
+- It sends your plugin token, note title, frontmatter metadata, note body, and the image file you explicitly choose or batch-upload from the current note only when you run publish, draft, sync, or image upload commands.
 - It writes blog binding metadata back into note frontmatter and can replace the current note when you run `Sync Current Note From Blog`.
 - It does not include ads or telemetry.
 

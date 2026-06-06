@@ -26,6 +26,7 @@ type MessageCatalog = {
   showCurrentNoteVersionHistoryCommand: string;
   restoreCurrentNoteFromBlogVersionCommand: string;
   uploadImageCommand: string;
+  uploadCurrentNoteUnsyncedImagesCommand: string;
   openMarkdownNoteFirst: string;
   failedToSaveDraft: string;
   failedToPublishNote: string;
@@ -34,8 +35,14 @@ type MessageCatalog = {
   failedToLoadVersionHistory: string;
   failedToRestoreNoteFromVersionHistory: string;
   failedToUploadImage: string;
+  failedToUploadCurrentNoteUnsyncedImages: string;
   insertedImageMarkdown: (fileName: string) => string;
   selectSupportedImageFile: string;
+  syncingCurrentNoteImages: string;
+  noLocalImagesFoundInCurrentNote: string;
+  noUnsyncedImagesFoundInCurrentNote: string;
+  unsupportedEmbeddedImageFormat: (fileName: string) => string;
+  syncedCurrentNoteImages: (uploadedCount: number, skippedCount: number) => string;
   versionHistoryViewTitle: string;
   versionHistoryTitle: string;
   currentNoteLabel: (fileName: string) => string;
@@ -111,6 +118,7 @@ const enMessages: MessageCatalog = {
   showCurrentNoteVersionHistoryCommand: "Show Current Note Version History",
   restoreCurrentNoteFromBlogVersionCommand: "Restore Current Note From Blog Version",
   uploadImageCommand: "Upload Image",
+  uploadCurrentNoteUnsyncedImagesCommand: "Upload Unsynced Images in Current Note",
   openMarkdownNoteFirst: "Open a Markdown note first.",
   failedToSaveDraft: "Failed to save draft.",
   failedToPublishNote: "Failed to publish note.",
@@ -119,8 +127,15 @@ const enMessages: MessageCatalog = {
   failedToLoadVersionHistory: "Failed to load version history.",
   failedToRestoreNoteFromVersionHistory: "Failed to restore note from version history.",
   failedToUploadImage: "Failed to upload image.",
+  failedToUploadCurrentNoteUnsyncedImages: "Failed to upload unsynced images in current note.",
   insertedImageMarkdown: (fileName) => `Inserted image markdown for ${fileName}`,
   selectSupportedImageFile: "Please select a jpg, jpeg, png, webp, or gif image.",
+  syncingCurrentNoteImages: "Uploading unsynced images in current note...",
+  noLocalImagesFoundInCurrentNote: "No local images found in the current note.",
+  noUnsyncedImagesFoundInCurrentNote: "All images in the current note are already synced.",
+  unsupportedEmbeddedImageFormat: (fileName) => `Unsupported embedded image format: ${fileName}`,
+  syncedCurrentNoteImages: (uploadedCount, skippedCount) =>
+    `Uploaded ${uploadedCount} image(s) from the current note. Skipped ${skippedCount}.`,
   versionHistoryViewTitle: "Mails Blog Version History",
   versionHistoryTitle: "Version History",
   currentNoteLabel: (fileName) => `Current note: ${fileName}`,
@@ -211,6 +226,7 @@ const zhMessages: Partial<MessageCatalog> = {
   showCurrentNoteVersionHistoryCommand: "查看当前笔记的版本历史",
   restoreCurrentNoteFromBlogVersionCommand: "从博客版本恢复当前笔记",
   uploadImageCommand: "上传图片",
+  uploadCurrentNoteUnsyncedImagesCommand: "上传当前笔记未同步的全部图片",
   openMarkdownNoteFirst: "请先打开一个 Markdown 笔记。",
   failedToSaveDraft: "保存草稿失败。",
   failedToPublishNote: "发布笔记失败。",
@@ -219,8 +235,15 @@ const zhMessages: Partial<MessageCatalog> = {
   failedToLoadVersionHistory: "加载版本历史失败。",
   failedToRestoreNoteFromVersionHistory: "从版本历史恢复笔记失败。",
   failedToUploadImage: "上传图片失败。",
+  failedToUploadCurrentNoteUnsyncedImages: "上传当前笔记未同步图片失败。",
   insertedImageMarkdown: (fileName) => `已插入图片 Markdown：${fileName}`,
   selectSupportedImageFile: "请选择 jpg、jpeg、png、webp 或 gif 图片。",
+  syncingCurrentNoteImages: "正在上传当前笔记未同步的图片...",
+  noLocalImagesFoundInCurrentNote: "当前笔记中没有找到本地图片。",
+  noUnsyncedImagesFoundInCurrentNote: "当前笔记中的图片都已经同步。",
+  unsupportedEmbeddedImageFormat: (fileName) => `不支持的嵌入图片格式：${fileName}`,
+  syncedCurrentNoteImages: (uploadedCount, skippedCount) =>
+    `已上传当前笔记中的 ${uploadedCount} 张图片，跳过 ${skippedCount} 张。`,
   versionHistoryViewTitle: "Mails Blog 版本历史",
   versionHistoryTitle: "版本历史",
   currentNoteLabel: (fileName) => `当前笔记：${fileName}`,
