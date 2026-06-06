@@ -127,10 +127,10 @@ export class MailsBlogApiClient {
     });
 
     if (response.status >= 200 && response.status < 300) {
-      return response.json as BlogImageUploadResponse;
+      return response.json as unknown as BlogImageUploadResponse;
     }
 
-    const errorBody = response.json;
+    const errorBody: unknown = response.json;
     const fallbackText = response.text?.trim();
     throw new MailsBlogApiError(
       getErrorMessage(errorBody ?? fallbackText, messages.imageUploadFailedStatus(response.status)),
@@ -169,10 +169,10 @@ export class MailsBlogApiClient {
     });
 
     if (response.status >= 200 && response.status < 300) {
-      return response.json as T;
+      return response.json as unknown as T;
     }
 
-    const errorBody = response.json;
+    const errorBody: unknown = response.json;
     const fallbackText = response.text?.trim();
     throw new MailsBlogApiError(
       getErrorMessage(errorBody ?? fallbackText, messages.requestFailedStatus(response.status)),
@@ -240,7 +240,7 @@ export class MailsBlogApiClient {
     });
 
     if (response.status < 200 || response.status >= 300) {
-      const errorBody = response.json;
+      const errorBody: unknown = response.json;
       const fallbackText = response.text?.trim();
       const message = getErrorMessage(errorBody ?? fallbackText, messages.tokenRefreshFailed);
       throw new MailsBlogApiError(message, response.status);

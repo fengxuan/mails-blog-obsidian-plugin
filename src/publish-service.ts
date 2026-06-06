@@ -446,13 +446,6 @@ type EmbeddedLocalImage = {
   originalText: string;
   resolvedFile: TFile;
 };
-
-const SUPPORTED_IMAGE_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-]);
 export async function uploadCurrentNoteUnsyncedImages(
   app: App,
   file: TFile,
