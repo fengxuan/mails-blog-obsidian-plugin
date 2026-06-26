@@ -7,6 +7,7 @@
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
     "check": "tsc --noEmit --skipLibCheck",
+    "release:new": "node scripts/release-version.mjs",
     "release:prepare": "npm run build",
     "release:package": "npm run build && mkdir -p release/mails-blog-publisher && cp manifest.json main.js styles.css versions.json README.md AI_HANDOFF.md release/mails-blog-publisher/"
   },

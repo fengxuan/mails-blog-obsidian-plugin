@@ -943,6 +943,8 @@ Release helper commands:
 - `npm run check`
 - `npm run build`
 - `npm run release:package`
+- `npm run release:new -- 1.0.15`
+- workspace root shortcut: `npm run release:obsidian-plugin -- 1.0.15`
 
 Release packaging behavior:
 
@@ -961,8 +963,12 @@ Release packaging behavior:
 
 Current publish model:
 
-- This plugin is ready for manual distribution and manual install.
-- It is not yet wired to the public Obsidian community plugin registry workflow.
+- `npm run release:new -- <version>` now handles version bumping, packaging, release commit creation, Git tag creation, and pushing the release tag for the existing GitHub release workflow.
+- This plugin is already listed in the Obsidian community plugins directory.
+- GitHub release publishing and Obsidian manual review submission are two separate steps.
+- After the GitHub release is live, open `https://community.obsidian.md/account/plugins`, open `Mails Blog Publisher`, and use `Add new version` to submit that release for Obsidian review.
+- If you are not signed in, the plugins portal redirects to the Obsidian login page first.
+- The public community plugin entry currently indicates that the plugin has not yet been manually reviewed by Obsidian staff.
 - Before any broader public release, re-check:
   - `manifest.json` metadata
   - plugin author/contact URLs

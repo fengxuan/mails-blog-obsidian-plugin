@@ -39,6 +39,53 @@ For a manual install or an unreleased build:
 
 If you build from source, run `npm run release:package` to create a ready-to-copy `release/mails-blog-publisher/` folder.
 
+## Release A New Version
+
+From the plugin repo:
+
+```bash
+npm run release:new -- 1.0.15
+```
+
+From the workspace root:
+
+```bash
+npm run release:obsidian-plugin -- 1.0.15
+```
+
+What the release command does:
+
+- bumps `package.json` and `package-lock.json`
+- syncs `manifest.json` and `versions.json`
+- rebuilds and refreshes `release/mails-blog-publisher/`
+- creates a `Release <version>` git commit
+- creates the matching Git tag
+- pushes the branch and tag so `.github/workflows/release.yml` can publish the GitHub Release
+- leaves the Obsidian review request as a separate manual portal step
+
+Useful options:
+
+- `--minor` or `--major` to auto-bump instead of passing an explicit version
+- `--min-app-version 1.8.0` to update the required Obsidian version for this release
+- `--skip-push` to prepare the commit and tag locally without pushing
+- `--dry-run` to preview every step without changing files or git state
+
+## Submit The New Version For Obsidian Review
+
+After the GitHub Actions release workflow finishes and the new GitHub Release is visible:
+
+1. Open `https://community.obsidian.md/account/plugins`.
+2. If you are not signed in, Obsidian will first redirect you to the login page and then return you to the plugins portal.
+3. Open the `Mails Blog Publisher` plugin entry.
+4. Use `Add new version` to submit the just-published release version for review.
+5. Wait for Obsidian staff review.
+
+Notes:
+
+- This plugin is already listed in the Obsidian community plugins directory.
+- The public directory entry currently shows that it has not been manually reviewed by Obsidian staff yet.
+- Treat the portal review submission as required release follow-up whenever you want a new version to enter the Obsidian manual review queue.
+
 ## Setup
 
 1. In iOS, open `Settings -> Obsidian Plugin`.
